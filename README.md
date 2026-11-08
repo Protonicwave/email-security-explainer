@@ -78,3 +78,13 @@ The rule modules need full line and branch coverage:
 uv run coverage run --branch --source=email_security_explainer -m pytest
 uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
 ```
+
+The claim check also has a mutation test with cosmic-ray, which must leave no
+surviving mutant. CI runs it on Ubuntu; it also runs on Windows:
+
+```sh
+uv run cosmic-ray init pyproject.toml mutation.sqlite
+uv run cr-filter-operators mutation.sqlite pyproject.toml
+uv run cosmic-ray exec pyproject.toml mutation.sqlite
+uv run cr-rate mutation.sqlite --fail-over 0.1
+```

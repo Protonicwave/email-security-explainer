@@ -46,6 +46,10 @@ class ClaimCheck:
     verdict: Verdict
     unsupported_tokens: tuple[str, ...] = ()
 
+    @property
+    def is_accepted(self) -> bool:
+        return self.verdict is Verdict.ACCEPTED
+
 
 @dataclass(frozen=True, slots=True)
 class CheckReport:
@@ -58,7 +62,7 @@ class CheckReport:
         return (
             not self.missed
             and not self.summary_unsupported_tokens
-            and all(claim_check.verdict is Verdict.ACCEPTED for claim_check in self.claim_checks)
+            and all(claim_check.is_accepted for claim_check in self.claim_checks)
         )
 
 
@@ -70,7 +74,7 @@ def check(
     claim_checks: list[ClaimCheck] = []
     for claim in explanation.claims:
         claim_check = _check_claim(claim, findings, uncovered, record_tokens)
-        if claim_check.verdict is Verdict.ACCEPTED:
+        if claim_check.is_accepted:
             uncovered.remove(Finding(claim.finding_code, claim.quoted_value))
         claim_checks.append(claim_check)
     return CheckReport(
@@ -86,13 +90,12 @@ def _check_claim(
     uncovered: list[Finding],
     record_tokens: frozenset[str],
 ) -> ClaimCheck:
-    same_code = [finding for finding in findings if finding.code is claim.finding_code]
-    if not same_code:
-        return ClaimCheck(claim, Verdict.INVENTED)
-    if claim.record is not same_code[0].record:
-        return ClaimCheck(claim, Verdict.WRONG_RECORD)
     claimed = Finding(claim.finding_code, claim.quoted_value)
-    if claimed not in same_code:
+    if claim.finding_code not in {finding.code for finding in findings}:
+        return ClaimCheck(claim, Verdict.INVENTED)
+    if claim.record is not claimed.record:
+        return ClaimCheck(claim, Verdict.WRONG_RECORD)
+    if claimed not in findings:
         return ClaimCheck(claim, Verdict.WRONG_DETAIL)
     if claimed not in uncovered:
         return ClaimCheck(claim, Verdict.DUPLICATE)

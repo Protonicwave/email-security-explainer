@@ -182,8 +182,6 @@ def _passed_parts(explanation: Explanation, report: CheckReport) -> Explanation:
     return Explanation(
         summary="" if report.summary_unsupported_tokens else explanation.summary,
         claims=[
-            claim_check.claim
-            for claim_check in report.claim_checks
-            if claim_check.verdict is Verdict.ACCEPTED
+            claim_check.claim for claim_check in report.claim_checks if claim_check.is_accepted
         ],
     )

@@ -1,3 +1,5 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
@@ -124,6 +126,15 @@ def test_claim_naming_the_wrong_record_is_wrong_record() -> None:
 
     assert verdicts(report)[0] is Verdict.WRONG_RECORD
     assert report.missed == (Finding(FindingCode.SPF_SOFTFAIL, "~all"),)
+
+
+def test_dmarc_claim_naming_the_spf_record_is_wrong_record() -> None:
+    misfiled = claim(FindingCode.DMARC_POLICY_NONE, "p=none", record=RecordKind.SPF)
+
+    report = run_check([CLEAN_CLAIMS[0], misfiled, CLEAN_CLAIMS[2]])
+
+    assert verdicts(report)[1] is Verdict.WRONG_RECORD
+    assert report.missed == (Finding(FindingCode.DMARC_POLICY_NONE, "p=none"),)
 
 
 def test_second_claim_for_one_finding_is_duplicate() -> None:
@@ -266,3 +277,25 @@ def test_summary_quoting_a_token_absent_from_the_records_fails_the_check() -> No
     assert verdicts(report) == [Verdict.ACCEPTED] * 3
     assert report.summary_unsupported_tokens == ("p=reject", "+all")
     assert not report.is_clean
+
+
+def test_claim_check_cannot_be_modified() -> None:
+    claim_check = run_check(CLEAN_CLAIMS).claim_checks[0]
+
+    with pytest.raises(FrozenInstanceError):
+        claim_check.verdict = Verdict.INVENTED  # type: ignore[misc]  # frozen on purpose
+
+
+def test_report_cannot_be_modified() -> None:
+    report = run_check(CLEAN_CLAIMS)
+
+    with pytest.raises(FrozenInstanceError):
+        report.missed = ()  # type: ignore[misc]  # frozen on purpose
+
+
+def test_claim_check_stores_no_instance_dictionary() -> None:
+    assert not hasattr(run_check(CLEAN_CLAIMS).claim_checks[0], "__dict__")
+
+
+def test_report_stores_no_instance_dictionary() -> None:
+    assert not hasattr(run_check(CLEAN_CLAIMS), "__dict__")

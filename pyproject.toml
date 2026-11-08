@@ -53,9 +53,30 @@ branch = true
 
 [dependency-groups]
 dev = [
+    "cosmic-ray>=8.8.0",
     "coverage>=7.17.2",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
     "vulture>=2.16",
+]
+
+# Mutation testing of the claim checker. Run with the commands in the README.
+[cosmic-ray]
+module-path = "src/email_security_explainer/claims.py"
+timeout = 60.0
+excluded-modules = []
+test-command = "pytest -x -q -p no:cacheprovider tests/test_claims.py"
+
+[cosmic-ray.distributor]
+name = "local"
+
+# Enum members are singletons, so `is` and `==` (or `is not` and `!=`) cannot be
+# told apart, and `<=` against Verdict.ACCEPTED matches only that member because
+# its value sorts first. These mutants are equivalent, not untested.
+[cosmic-ray.filters.operators-filter]
+exclude-operators = [
+    "core/ReplaceComparisonOperator_Is_Eq",
+    "core/ReplaceComparisonOperator_Is_LtE",
+    "core/ReplaceComparisonOperator_IsNot_NotEq",
 ]

@@ -10,3 +10,6 @@ dist/
 .coverage
 htmlcov/
 .env
+
+# cosmic-ray
+mutation.sqlite
