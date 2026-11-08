@@ -50,7 +50,7 @@ def fetch_records(domain: DomainName, lookup: TxtLookup = lookup_txt) -> DnsReco
     for _ in range(MAX_FETCH_ROUNDS):
         walk = spf.walk_lookups(apex_txt, spf_by_domain)
         if walk.is_complete:
-            return DnsRecords(apex_txt, dmarc_txt, spf_by_domain)
+            return DnsRecords(domain, apex_txt, dmarc_txt, spf_by_domain)
         for target in sorted(walk.unresolved):
             spf_by_domain[target] = lookup(target) or ()
     raise AssertionError(f"SPF walk for {domain} did not finish in {MAX_FETCH_ROUNDS} rounds")

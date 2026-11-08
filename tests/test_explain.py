@@ -7,6 +7,7 @@ import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import Verdict
+from email_security_explainer.domain import DomainName
 from email_security_explainer.explain import (
     RAW_RECORDS_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -18,6 +19,7 @@ from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 RECORDS = DnsRecords(
+    domain=DomainName("example.com"),
     apex_txt=("verification=abc", "v=spf1 include:_spf.mail.example.net ~all"),
     dmarc_txt=("v=DMARC1; p=none",),
     spf_by_domain={"_spf.mail.example.net": ("v=spf1 ip4:192.0.2.0/24 -all",)},
@@ -60,7 +62,7 @@ class ScriptedModel:
 def test_clean_answer_is_returned_without_a_repair_round() -> None:
     model = ScriptedModel(CLEAN)
 
-    result = explain("example.com", FINDINGS, RECORDS, model)
+    result = explain(FINDINGS, RECORDS, model)
 
     assert result.explanation == CLEAN
     assert result.last_answer_check.is_clean
@@ -70,7 +72,7 @@ def test_clean_answer_is_returned_without_a_repair_round() -> None:
 def test_request_shows_the_records_and_findings() -> None:
     model = ScriptedModel(CLEAN)
 
-    explain("example.com", FINDINGS, RECORDS, model)
+    explain(FINDINGS, RECORDS, model)
 
     assert model.requests[0].splitlines() == [
         "Domain: example.com",
@@ -90,9 +92,9 @@ def test_request_shows_the_records_and_findings() -> None:
 
 def test_request_marks_absent_records_and_findings() -> None:
     model = ScriptedModel(Explanation(summary=SUMMARY, claims=[]))
-    records = DnsRecords(apex_txt=(), dmarc_txt=())
+    records = DnsRecords(domain=DomainName("example.com"), apex_txt=(), dmarc_txt=())
 
-    explain("example.com", [], records, model)
+    explain([], records, model)
 
     assert model.requests[0].splitlines()[3:] == [
         "SPF at example.com: none",
@@ -116,7 +118,7 @@ def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
     )
     model = ScriptedModel(first, CLEAN)
 
-    result = explain("example.com", FINDINGS, RECORDS, model)
+    result = explain(FINDINGS, RECORDS, model)
 
     assert result.last_answer_check.is_clean
     repair = model.requests[1]
@@ -142,7 +144,7 @@ def test_parts_still_failing_after_repair_are_dropped() -> None:
     )
     model = ScriptedModel(still_failing, still_failing)
 
-    result = explain("example.com", FINDINGS, RECORDS, model)
+    result = explain(FINDINGS, RECORDS, model)
 
     assert len(model.requests) == 2
     assert result.explanation == Explanation(summary="", claims=CLEAN.claims[:2])
@@ -159,7 +161,7 @@ def test_model_failure_propagates() -> None:
         raise ExplanationError("declined")
 
     with pytest.raises(ExplanationError, match="declined"):
-        explain("example.com", FINDINGS, RECORDS, failing_model)
+        explain(FINDINGS, RECORDS, failing_model)
 
 
 def message(text: str, stop_reason: str = "end_turn", **extra: Any) -> dict[str, Any]:
@@ -260,11 +262,13 @@ def test_generator_sends_the_system_prompt_it_is_given() -> None:
 
 def test_request_tells_evidence_reading_none_apart_from_no_evidence() -> None:
     records = DnsRecords(
-        apex_txt=("v=spf1 -all",), dmarc_txt=("v=DMARC1; p=reject; rua=mailto:d@example.com; none",)
+        domain=DomainName("example.com"),
+        apex_txt=("v=spf1 -all",),
+        dmarc_txt=("v=DMARC1; p=reject; rua=mailto:d@example.com; none",),
     )
     model = ScriptedModel(Explanation(summary=SUMMARY, claims=[]), CLEAN)
 
-    explain("example.com", audit(records), records, model)
+    explain(audit(records), records, model)
 
     assert model.requests[0].splitlines()[-1] == (
         '1. DMARC_SYNTAX (dmarc record, high severity), evidence: "none"'

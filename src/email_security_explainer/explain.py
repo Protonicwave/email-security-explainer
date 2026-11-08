@@ -125,14 +125,12 @@ class ExplainResult:
     last_answer_check: CheckReport
 
 
-def explain(
-    domain: str, findings: Sequence[Finding], records: DnsRecords, generate: Generate
-) -> ExplainResult:
+def explain(findings: Sequence[Finding], records: DnsRecords, generate: Generate) -> ExplainResult:
     """Explain `findings`, with one repair round if the first answer fails the check.
 
     Raises ExplanationError from `generate`.
     """
-    request = findings_request(domain, findings, records)
+    request = findings_request(findings, records)
     return check_and_repair(request, generate(request), findings, records, generate)
 
 
@@ -182,9 +180,9 @@ def claude_generator(client: anthropic.Anthropic, model: str, system_prompt: str
     return generate
 
 
-def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecords) -> str:
+def findings_request(findings: Sequence[Finding], records: DnsRecords) -> str:
     """The request to pair with SYSTEM_PROMPT: the records and the findings."""
-    lines = [raw_records_request(domain, records), "", "Findings:"]
+    lines = [raw_records_request(records), "", "Findings:"]
     lines += [
         f"{number}. {finding.code} ({finding.record} record, {finding.severity} severity), "
         f"evidence: {_evidence_text(finding)}"
@@ -195,8 +193,9 @@ def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecor
     return "\n".join(lines)
 
 
-def raw_records_request(domain: str, records: DnsRecords) -> str:
+def raw_records_request(records: DnsRecords) -> str:
     """The request to pair with RAW_RECORDS_SYSTEM_PROMPT: the records alone."""
+    domain = records.domain
     lines = [f"Domain: {domain}", "", "Records:"]
     lines += _record_lines(f"SPF at {domain}", spf.select_records(records.apex_txt))
     lines += _record_lines(f"DMARC at _dmarc.{domain}", records.dmarc_txt)

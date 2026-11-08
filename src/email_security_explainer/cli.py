@@ -140,7 +140,7 @@ def _audit_or_explain(
         return _render_json(domain, findings) if args.json else _render_text(domain, findings)
     if not findings:
         return _render_text(domain, findings)
-    result = explain(domain, findings, records, generator_for(args.model, SYSTEM_PROMPT))
+    result = explain(findings, records, generator_for(args.model, SYSTEM_PROMPT))
     return _render_explanation(domain, findings, result)
 
 

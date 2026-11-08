@@ -2,10 +2,12 @@ import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import CheckReport, Verdict, check
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 RECORDS = DnsRecords(
+    domain=DomainName("example.com"),
     apex_txt=(
         "verification=abc include:verify.example.org",
         "v=spf1 include:_spf.mail.example.net ~all",
@@ -132,7 +134,9 @@ def test_claim_after_a_rejected_claim_for_the_same_finding_is_accepted() -> None
     assert report.missed == ()
 
 
-SYNTAX_RECORDS = DnsRecords(apex_txt=("v=spf1 foo bar -all",), dmarc_txt=())
+SYNTAX_RECORDS = DnsRecords(
+    domain=DomainName("example.com"), apex_txt=("v=spf1 foo bar -all",), dmarc_txt=()
+)
 SYNTAX_FINDINGS = [
     Finding(FindingCode.SPF_SYNTAX, "foo"),
     Finding(FindingCode.SPF_SYNTAX, "bar"),
@@ -160,7 +164,9 @@ def test_findings_sharing_a_code_are_matched_by_evidence() -> None:
 
 
 def test_identical_findings_each_need_their_own_claim() -> None:
-    records = DnsRecords(apex_txt=("v=spf1 foo foo -all",), dmarc_txt=())
+    records = DnsRecords(
+        domain=DomainName("example.com"), apex_txt=("v=spf1 foo foo -all",), dmarc_txt=()
+    )
     findings = audit(records)
     assert findings.count(Finding(FindingCode.SPF_SYNTAX, "foo")) == 2
 
@@ -275,6 +281,7 @@ def test_curly_quotes_around_a_token_are_not_part_of_it() -> None:
 
 def test_each_address_in_a_report_list_is_supported() -> None:
     records = DnsRecords(
+        domain=DomainName("example.com"),
         apex_txt=("v=spf1 ~all",),
         dmarc_txt=("v=DMARC1; p=none; rua=mailto:a@reports.example, mailto:b@reports.example",),
     )

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from email_security_explainer import dmarc, spf
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding
 
 
@@ -11,12 +12,13 @@ from email_security_explainer.findings import Finding
 # frozen dataclass, and slots only saves memory.
 @dataclass(frozen=True, slots=True)  # pragma: no mutate
 class DnsRecords:
-    """TXT records for one domain.
+    """The TXT records `domain` publishes.
 
     `spf_by_domain` maps each include or redirect target (lower case, no
     trailing dot) to its TXT records, an empty tuple when it has none.
     """
 
+    domain: DomainName
     apex_txt: tuple[str, ...]
     dmarc_txt: tuple[str, ...]
     spf_by_domain: Mapping[str, tuple[str, ...]] = field(default_factory=dict)

@@ -54,12 +54,6 @@ class Condition(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class Case:
-    domain: str
-    records: DnsRecords
-
-
-@dataclass(frozen=True, slots=True)
 class Score:
     """Claims and findings in one explanation, counted against the audit.
 
@@ -113,7 +107,7 @@ class _CaseFields(pydantic.BaseModel):
 _CASE_FILE = pydantic.TypeAdapter(list[_CaseFields])
 
 
-def load_cases(text: str) -> list[Case]:
+def load_cases(text: str) -> list[DnsRecords]:
     """Parse a JSON case file.
 
     Raises ValueError when the file is malformed, empty or longer than MAX_CASES,
@@ -123,26 +117,25 @@ def load_cases(text: str) -> list[Case]:
     all_fields = _CASE_FILE.validate_json(text)
     if len(all_fields) > MAX_CASES:
         raise ValueError(f"expected at most {MAX_CASES} cases, got {len(all_fields)}")
-    cases: list[Case] = []
+    cases: list[DnsRecords] = []
     seen: set[str] = set()
     for fields in all_fields:
         domain = parse_domain(fields.domain)
         if domain in seen:
             raise ValueError(f"case {domain} appears more than once")
         seen.add(domain)
-        records = DnsRecords(fields.apex_txt, fields.dmarc_txt, fields.spf_by_domain)
-        walk = spf.walk_lookups(records.apex_txt, records.spf_by_domain)
+        walk = spf.walk_lookups(fields.apex_txt, fields.spf_by_domain)
         if not walk.is_complete:
             missing = ", ".join(sorted(walk.unresolved))
             raise ValueError(f"case {domain} has no spf_by_domain entry for {missing}")
-        cases.append(Case(domain, records))
+        cases.append(DnsRecords(domain, fields.apex_txt, fields.dmarc_txt, fields.spf_by_domain))
     if not cases:
         raise ValueError("expected at least one case, got an empty list")
     return cases
 
 
 def evaluate(
-    cases: Sequence[Case], from_findings: Generate, from_records: Generate, repeats: int
+    cases: Sequence[DnsRecords], from_findings: Generate, from_records: Generate, repeats: int
 ) -> Iterator[Run]:
     """Run every condition on every case, `repeats` times over.
 
@@ -150,9 +143,9 @@ def evaluate(
     requests. A model or API failure fails that condition and the run goes on.
     """
     for repeat in range(1, repeats + 1):
-        for case in cases:
-            for condition, outcome in _run_case(case, from_findings, from_records):
-                yield Run(case.domain, repeat, condition, outcome)
+        for records in cases:
+            for condition, outcome in _run_case(records, from_findings, from_records):
+                yield Run(records.domain, repeat, condition, outcome)
 
 
 def score(report: CheckReport) -> Score:
@@ -172,25 +165,25 @@ def summarise(runs: Sequence[Run]) -> list[ConditionSummary]:
 
 
 def _run_case(
-    case: Case, from_findings: Generate, from_records: Generate
+    records: DnsRecords, from_findings: Generate, from_records: Generate
 ) -> Iterator[tuple[Condition, Score | Failure]]:
-    findings = audit(case.records)
-    raw_request = raw_records_request(case.domain, case.records)
+    findings = audit(records)
+    raw_request = raw_records_request(records)
     yield (
         Condition.RAW_RECORDS,
-        _attempt(lambda: score(check(findings, from_records(raw_request), case.records))),
+        _attempt(lambda: score(check(findings, from_records(raw_request), records))),
     )
-    request = findings_request(case.domain, findings, case.records)
+    request = findings_request(findings, records)
     first = _attempt(lambda: from_findings(request))
     if isinstance(first, Failure):
         yield Condition.FINDINGS, first
         yield Condition.FINDINGS_CHECKED, first
         return
-    yield Condition.FINDINGS, score(check(findings, first, case.records))
+    yield Condition.FINDINGS, score(check(findings, first, records))
 
     def checked_score() -> Score:
-        result = check_and_repair(request, first, findings, case.records, from_findings)
-        return score(check(findings, result.explanation, case.records))
+        result = check_and_repair(request, first, findings, records, from_findings)
+        return score(check(findings, result.explanation, records))
 
     yield Condition.FINDINGS_CHECKED, _attempt(checked_score)
 

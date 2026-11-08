@@ -3,6 +3,7 @@ from collections.abc import Mapping
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode, RecordKind, Severity
 from email_security_explainer.spf import walk_lookups
 
@@ -17,7 +18,12 @@ def spf_findings(
     dmarc: str = ENFORCING_DMARC,
     spf_by_domain: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[Finding]:
-    records = DnsRecords(apex_txt=apex_txt, dmarc_txt=(dmarc,), spf_by_domain=spf_by_domain or {})
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=apex_txt,
+        dmarc_txt=(dmarc,),
+        spf_by_domain=spf_by_domain or {},
+    )
     return [finding for finding in audit(records) if finding.record is RecordKind.SPF]
 
 
@@ -238,7 +244,11 @@ def test_every_code_has_a_severity() -> None:
 
 
 def test_softfail_reported_when_dmarc_records_conflict() -> None:
-    records = DnsRecords(apex_txt=("v=spf1 ~all",), dmarc_txt=(ENFORCING_DMARC, ENFORCING_DMARC))
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=("v=spf1 ~all",),
+        dmarc_txt=(ENFORCING_DMARC, ENFORCING_DMARC),
+    )
 
     assert Finding(FindingCode.SPF_SOFTFAIL, "~all") in audit(records)
 
