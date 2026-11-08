@@ -21,6 +21,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "PT", "N", "C90", "PLR"]
+# Assertions guard internal invariants; input is validated with exceptions.
+ignore = ["S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -31,7 +33,7 @@ max-complexity = 10
 
 [tool.mypy]
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
