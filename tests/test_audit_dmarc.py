@@ -71,3 +71,24 @@ def test_reports_gap(dmarc_txt: tuple[str, ...], expected: list[Finding]) -> Non
 )
 def test_malformed_record_is_syntax_error(record: str, evidence: str | None) -> None:
     assert dmarc_findings((record,)) == [Finding(FindingCode.DMARC_SYNTAX, evidence)]
+
+
+@pytest.mark.parametrize(
+    ("record", "expected"),
+    [
+        (f"v=DMARC1; P = None; {RUA}", Finding(FindingCode.DMARC_POLICY_NONE, "P = None")),
+        (
+            f"v=DMARC1; p=reject; PCT = 50; {RUA}",
+            Finding(FindingCode.DMARC_PARTIAL_PCT, "PCT = 50"),
+        ),
+        (
+            f"v=DMARC1; p=reject; SP=None; {RUA}",
+            Finding(FindingCode.DMARC_SUBDOMAIN_NONE, "SP=None"),
+        ),
+        (f"v=DMARC1; p = bogus; {RUA}", Finding(FindingCode.DMARC_SYNTAX, "p = bogus")),
+        (f"v=DMARC1; p=reject; pct = abc; {RUA}", Finding(FindingCode.DMARC_SYNTAX, "pct = abc")),
+        (f"v=DMARC1; p=reject; sp = bogus; {RUA}", Finding(FindingCode.DMARC_SYNTAX, "sp = bogus")),
+    ],
+)
+def test_evidence_quotes_the_tag_as_written(record: str, expected: Finding) -> None:
+    assert dmarc_findings((record,)) == [expected]

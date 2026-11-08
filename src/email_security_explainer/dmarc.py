@@ -21,6 +21,13 @@ class DmarcAssessment:
     is_enforcing: bool
 
 
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
+class _Tag:
+    value: str
+    # The tag as written, so a finding quotes exactly what the owner sees.
+    text: str
+
+
 def assess(dmarc_txt: tuple[str, ...]) -> DmarcAssessment:
     records = [record for record in dmarc_txt if _VERSION.match(record.lstrip())]
     match records:
@@ -31,9 +38,10 @@ def assess(dmarc_txt: tuple[str, ...]) -> DmarcAssessment:
         case _:
             return DmarcAssessment([Finding(FindingCode.DMARC_MULTIPLE)], is_enforcing=False)
     findings = [Finding(FindingCode.DMARC_SYNTAX, segment) for segment in invalid_segments]
-    policy = tags.get("p", "").lower()
+    policy_tag = tags.get("p")
+    policy = policy_tag.value.lower() if policy_tag is not None else ""
     if policy not in _POLICIES:
-        evidence = f"p={tags['p']}" if "p" in tags else None
+        evidence = policy_tag.text if policy_tag is not None else None
         findings.append(Finding(FindingCode.DMARC_SYNTAX, evidence))
         return DmarcAssessment(findings, is_enforcing=False)
     percentage = _parse_percentage(tags, findings)
@@ -41,20 +49,20 @@ def assess(dmarc_txt: tuple[str, ...]) -> DmarcAssessment:
     # The policy is none, quarantine or reject and the percentage is at most 100,
     # so mutating these comparisons into orderings is equivalent.
     if policy == "none":  # pragma: no mutate
-        findings.append(Finding(FindingCode.DMARC_POLICY_NONE, f"p={tags['p']}"))
+        findings.append(Finding(FindingCode.DMARC_POLICY_NONE, tags["p"].text))
     else:
         if percentage < FULL_PERCENTAGE:  # pragma: no mutate
-            findings.append(Finding(FindingCode.DMARC_PARTIAL_PCT, f"pct={tags['pct']}"))
+            findings.append(Finding(FindingCode.DMARC_PARTIAL_PCT, tags["pct"].text))
         if subdomain_policy == "none":
-            findings.append(Finding(FindingCode.DMARC_SUBDOMAIN_NONE, f"sp={tags['sp']}"))
+            findings.append(Finding(FindingCode.DMARC_SUBDOMAIN_NONE, tags["sp"].text))
     if "rua" not in tags:
         findings.append(Finding(FindingCode.DMARC_NO_RUA))
     is_enforcing = policy != "none" and percentage == FULL_PERCENTAGE  # pragma: no mutate
     return DmarcAssessment(findings, is_enforcing=is_enforcing)
 
 
-def _parse_tags(record: str) -> tuple[dict[str, str], list[str]]:
-    tags: dict[str, str] = {}
+def _parse_tags(record: str) -> tuple[dict[str, _Tag], list[str]]:
+    tags: dict[str, _Tag] = {}
     invalid_segments: list[str] = []
     _version, _, tags_text = record.partition(";")
     for raw_segment in tags_text.split(";"):
@@ -66,25 +74,25 @@ def _parse_tags(record: str) -> tuple[dict[str, str], list[str]]:
         if not separator or not name or name in tags:
             invalid_segments.append(segment)
             continue
-        tags[name] = value.strip()
+        tags[name] = _Tag(value.strip(), segment)
     return tags, invalid_segments
 
 
-def _parse_percentage(tags: dict[str, str], findings: list[Finding]) -> int:
-    text = tags.get("pct")
-    if text is None:
+def _parse_percentage(tags: dict[str, _Tag], findings: list[Finding]) -> int:
+    tag = tags.get("pct")
+    if tag is None:
         return FULL_PERCENTAGE
-    if _PERCENTAGE.fullmatch(text) and int(text) <= FULL_PERCENTAGE:
-        return int(text)
-    findings.append(Finding(FindingCode.DMARC_SYNTAX, f"pct={text}"))
+    if _PERCENTAGE.fullmatch(tag.value) and int(tag.value) <= FULL_PERCENTAGE:
+        return int(tag.value)
+    findings.append(Finding(FindingCode.DMARC_SYNTAX, tag.text))
     return FULL_PERCENTAGE
 
 
-def _parse_subdomain_policy(tags: dict[str, str], findings: list[Finding]) -> str | None:
-    text = tags.get("sp")
-    if text is None:
+def _parse_subdomain_policy(tags: dict[str, _Tag], findings: list[Finding]) -> str | None:
+    tag = tags.get("sp")
+    if tag is None:
         return None
-    if text.lower() in _POLICIES:
-        return text.lower()
-    findings.append(Finding(FindingCode.DMARC_SYNTAX, f"sp={text}"))
+    if tag.value.lower() in _POLICIES:
+        return tag.value.lower()
+    findings.append(Finding(FindingCode.DMARC_SYNTAX, tag.text))
     return None
