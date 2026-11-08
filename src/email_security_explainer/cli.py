@@ -1,4 +1,4 @@
-"""Command-line entry point: `esx audit`, `esx explain` and `esx eval`."""
+"""Command-line entry point: `esx audit`, `esx explain`, `esx eval` and `esx case`."""
 
 import argparse
 import dataclasses
@@ -20,6 +20,7 @@ from email_security_explainer.evaluate import (
     ConditionSummary,
     Failure,
     Run,
+    dump_case,
     evaluate,
     load_cases,
     score,
@@ -69,6 +70,8 @@ def main(
     try:
         if args.command == "eval":
             output = _evaluate(args, generator_for)
+        elif args.command == "case":
+            output = dump_case(fetch_records(parse_domain(args.domain), lookup))
         else:
             output = _audit_or_explain(args, lookup, generator_for)
     except (
@@ -113,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"where to write every run as JSON Lines (default: {DEFAULT_RESULTS_PATH})",
     )
     _add_model_option(eval_command)
+    case_command = commands.add_parser(
+        "case", help="print a domain's records as a case for the evaluation corpus"
+    )
+    case_command.add_argument("domain", help="domain to capture, such as example.com")
     return parser
 
 

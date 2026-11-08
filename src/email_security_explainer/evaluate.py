@@ -137,6 +137,17 @@ def load_cases(text: str) -> list[DnsRecords]:
     return cases
 
 
+def dump_case(records: DnsRecords) -> str:
+    """Write `records` as one case object in the format `load_cases` reads."""
+    fields = _CaseFields(
+        domain=records.domain,
+        apex_txt=records.apex_txt,
+        dmarc_txt=records.dmarc_txt,
+        spf_by_domain=dict(records.spf_by_domain),
+    )
+    return fields.model_dump_json(indent=2)
+
+
 def evaluate(
     cases: Sequence[DnsRecords], from_findings: Generate, from_records: Generate, repeats: int
 ) -> Iterator[Run]:

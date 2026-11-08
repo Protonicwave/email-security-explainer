@@ -73,6 +73,13 @@ the evaluation moves on to the next run. Other API errors, such as a bad key,
 stop it. The corpus is capped at 100 cases and `--repeats` at 10, which bounds
 a run at about 3,000 model calls.
 
+`esx case` prints a live domain's records, including its SPF include chain, as
+one case object in the corpus format, ready to add to `cases/cases.json`:
+
+```sh
+uv run esx case example.com
+```
+
 ## Results
 
 One run of `esx eval --repeats 3` on 8 November 2026 with `claude-sonnet-5-5`

@@ -8,8 +8,11 @@ import anthropic
 import httpx2
 import pytest
 
+from email_security_explainer.audit import audit
 from email_security_explainer.cli import EXIT_FAILURE, EXIT_OK, main
-from email_security_explainer.dns_fetch import DnsLookupError
+from email_security_explainer.dns_fetch import DnsLookupError, fetch_records
+from email_security_explainer.domain import DomainName
+from email_security_explainer.evaluate import load_cases
 from email_security_explainer.explain import (
     DEFAULT_MODEL,
     RAW_RECORDS_SYSTEM_PROMPT,
@@ -75,6 +78,39 @@ def test_dns_failure_fails(capsys: pytest.CaptureFixture[str]) -> None:
 
     assert main(["audit", "example.com"], failing_lookup) == EXIT_FAILURE
     assert "timed out" in capsys.readouterr().err
+
+
+def captured_case(table: Mapping[str, tuple[str, ...]], capsys: pytest.CaptureFixture[str]) -> str:
+    assert run(["case", "Example.com"], table) == EXIT_OK
+    return capsys.readouterr().out
+
+
+def test_case_prints_a_case_that_audits_the_same_as_the_live_domain(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    table = {
+        "example.com": ("v=spf1 include:_spf.provider.example ~all", "site-verification=abc"),
+        "_dmarc.example.com": ("v=DMARC1; p=none",),
+        "_spf.provider.example": ("v=spf1 ip4:198.51.100.0/24 -all",),
+    }
+
+    (case,) = load_cases(f"[{captured_case(table, capsys)}]")
+
+    live = fetch_records(DomainName("example.com"), lambda name: table.get(name, ()))
+    assert case == live
+    assert audit(case) == audit(live)
+
+
+def test_case_keeps_a_chain_cut_off_at_the_lookup_limit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    includes = " ".join(f"include:spf{number}.example" for number in range(12))
+    table = {"example.com": (f"v=spf1 {includes} -all",)}
+    table |= {f"spf{number}.example": ("v=spf1 -all",) for number in range(12)}
+
+    (case,) = load_cases(f"[{captured_case(table, capsys)}]")
+
+    assert FindingCode.SPF_LOOKUP_LIMIT in {finding.code for finding in audit(case)}
 
 
 SOFTFAIL = {
