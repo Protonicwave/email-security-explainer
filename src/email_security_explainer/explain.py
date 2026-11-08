@@ -155,9 +155,7 @@ def check_and_repair(
     return ExplainResult(_passed_parts(explanation, report), report)
 
 
-def claude_generator(
-    client: anthropic.Anthropic, model: str, system_prompt: str = SYSTEM_PROMPT
-) -> Generate:
+def claude_generator(client: anthropic.Anthropic, model: str, system_prompt: str) -> Generate:
     output_format = JSONOutputFormatParam(
         type="json_schema", schema=anthropic.transform_schema(Explanation)
     )

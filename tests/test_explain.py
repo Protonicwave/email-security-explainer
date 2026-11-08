@@ -201,7 +201,7 @@ class FakeApi:
 def test_generator_sends_the_request_with_the_schema_and_parses_the_answer() -> None:
     api = FakeApi(message(CLEAN.model_dump_json()))
 
-    explanation = claude_generator(api.client(), "claude-test")("the request")
+    explanation = claude_generator(api.client(), "claude-test", SYSTEM_PROMPT)("the request")
 
     assert explanation == CLEAN
     sent = api.sent[0]
@@ -217,25 +217,29 @@ def test_generator_reports_a_refusal_with_its_category() -> None:
     body = message("", "refusal", stop_details={"type": "refusal", "category": "cyber"})
 
     with pytest.raises(ExplanationError, match=r"declined to explain \(category: cyber\)"):
-        claude_generator(FakeApi(body).client(), "claude-test")("the request")
+        claude_generator(FakeApi(body).client(), "claude-test", SYSTEM_PROMPT)("the request")
 
 
 def test_generator_reports_a_refusal_without_details() -> None:
     with pytest.raises(ExplanationError, match=r"category: None"):
-        claude_generator(FakeApi(message("", "refusal")).client(), "claude-test")("the request")
+        claude_generator(FakeApi(message("", "refusal")).client(), "claude-test", SYSTEM_PROMPT)(
+            "the request"
+        )
 
 
 def test_generator_reports_a_truncated_answer() -> None:
     body = message(CLEAN.model_dump_json()[:40], "max_tokens")
 
     with pytest.raises(ExplanationError, match="stopped before finishing: max_tokens"):
-        claude_generator(FakeApi(body).client(), "claude-test")("the request")
+        claude_generator(FakeApi(body).client(), "claude-test", SYSTEM_PROMPT)("the request")
 
 
 @pytest.mark.parametrize("text", ["not json", '{"summary": "no claims field"}'])
 def test_generator_rejects_output_outside_the_schema(text: str) -> None:
     with pytest.raises(ExplanationError, match="does not fit the schema"):
-        claude_generator(FakeApi(message(text)).client(), "claude-test")("the request")
+        claude_generator(FakeApi(message(text)).client(), "claude-test", SYSTEM_PROMPT)(
+            "the request"
+        )
 
 
 def test_raw_records_prompt_states_the_rule_for_every_finding_code() -> None:
