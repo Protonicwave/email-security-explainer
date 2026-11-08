@@ -1,0 +1,1928 @@
+{
+  "model": "claude-sonnet-5-5",
+  "repeats": 3,
+  "summary": [
+    {
+      "condition": "raw_records",
+      "scored": 63,
+      "failed": 0,
+      "errored": 0,
+      "explained": 102,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "condition": "findings",
+      "scored": 63,
+      "failed": 0,
+      "errored": 0,
+      "explained": 102,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "condition": "findings_checked",
+      "scored": 63,
+      "failed": 0,
+      "errored": 0,
+      "explained": 102,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    }
+  ],
+  "runs": [
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 1,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 1,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 1,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 2,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 2,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 2,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-no-dmarc.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-monitoring-only.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "softfail-enforced.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-provider-include.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-strict-ip.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "clean-mx-a.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 0,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-email-auth.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-spf-monitoring.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "typos-in-records.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "open-relay-spf.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "neutral-partial-rollout.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "no-all-subdomain-open.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "legacy-ptr.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "too-many-includes.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "redirect-to-group.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 1,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "vanished-include.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "broken-include-softfail.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 3,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "duplicate-dmarc.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "partial-enforcement.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "bad-pct-open-subdomains.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 3,
+      "condition": "raw_records",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 3,
+      "condition": "findings",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    },
+    {
+      "domain": "dmarc-without-policy.example",
+      "repeat": 3,
+      "condition": "findings_checked",
+      "outcome": "scored",
+      "explained": 2,
+      "invented": 0,
+      "missed": 0,
+      "wrong_detail": 0
+    }
+  ]
+}
