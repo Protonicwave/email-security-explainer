@@ -219,7 +219,7 @@ def run_eval(
 ) -> tuple[int, Path]:
     cases = tmp_path / "cases.json"
     cases.write_text(json.dumps([EVAL_CASE]), encoding="utf-8")
-    output = tmp_path / "results.json"
+    output = tmp_path / "results.jsonl"
 
     def generator_for(model: str, system_prompt: str) -> Generate:
         if prompts is not None:
@@ -254,23 +254,17 @@ def test_eval_reports_progress_for_every_run(
     )
 
 
-def test_eval_writes_every_run_as_json(tmp_path: Path) -> None:
-    _, output = run_eval(tmp_path, "--model", "claude-test")
+def written_runs(output: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
 
-    results = json.loads(output.read_text(encoding="utf-8"))
-    assert results["model"] == "claude-test"
-    assert results["repeats"] == 1
-    assert results["summary"][0] == {
-        "condition": "raw_records",
-        "scored": 1,
-        "failed": 0,
-        "errored": 0,
-        "explained": 1,
-        "invented": 0,
-        "missed": 1,
-        "wrong_detail": 0,
-    }
-    assert results["runs"][0] == {
+
+def test_eval_writes_every_run_as_a_json_line(tmp_path: Path) -> None:
+    _, output = run_eval(tmp_path, "--model", "claude-test", "--repeats", "2")
+
+    runs = written_runs(output)
+    assert len(runs) == 6
+    assert runs[0] == {
+        "model": "claude-test",
         "domain": "softfail.example",
         "repeat": 1,
         "condition": "raw_records",
@@ -282,20 +276,51 @@ def test_eval_writes_every_run_as_json(tmp_path: Path) -> None:
     }
 
 
-def test_eval_records_a_failed_run_with_its_message(tmp_path: Path) -> None:
+def eval_with_model(tmp_path: Path, model: Generate, output: Path) -> int:
     cases = tmp_path / "cases.json"
-    cases.write_text(json.dumps([EVAL_CASE]), encoding="utf-8")
-    output = tmp_path / "results.json"
+    cases.write_text(json.dumps([EVAL_CASE, {**EVAL_CASE, "domain": "two.example"}]), "utf-8")
+    argv = ["eval", "--cases", str(cases), "--output", str(output)]
+    return main(argv, generator_for=lambda model_name, prompt: model)
 
+
+def test_eval_records_a_failed_run_with_its_message(tmp_path: Path) -> None:
     def declining_model(request: str) -> Explanation:
         raise ExplanationError("claude-test declined to explain (category: cyber)")
 
-    argv = ["eval", "--cases", str(cases), "--output", str(output)]
-    assert main(argv, generator_for=lambda model, prompt: declining_model) == EXIT_OK
+    output = tmp_path / "results.jsonl"
+    assert eval_with_model(tmp_path, declining_model, output) == EXIT_OK
 
-    run = json.loads(output.read_text(encoding="utf-8"))["runs"][0]
+    run = written_runs(output)[0]
     assert run["outcome"] == "no_explanation"
     assert run["message"] == "claude-test declined to explain (category: cyber)"
+
+
+def test_eval_keeps_the_runs_finished_before_an_error_stops_it(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def model_losing_its_key(request: str) -> Explanation:
+        calls.append(request)
+        if len(calls) > 2:
+            response = httpx2.Response(401, request=httpx2.Request("POST", "https://api.test"))
+            raise anthropic.AuthenticationError("key revoked", response=response, body=None)
+        return explanation_with(softfail_claim(), policy_claim())
+
+    output = tmp_path / "results.jsonl"
+    assert eval_with_model(tmp_path, model_losing_its_key, output) == EXIT_FAILURE
+
+    assert [run["domain"] for run in written_runs(output)] == ["softfail.example"] * 3
+
+
+def test_eval_fails_before_calling_the_model_when_the_output_cannot_be_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def unexpected_model(request: str) -> Explanation:
+        raise AssertionError("the model should not be called")
+
+    output = tmp_path / "missing" / "results.jsonl"
+    assert eval_with_model(tmp_path, unexpected_model, output) == EXIT_FAILURE
+
+    assert "results.jsonl" in capsys.readouterr().err
 
 
 def test_eval_gives_each_condition_its_system_prompt(tmp_path: Path) -> None:

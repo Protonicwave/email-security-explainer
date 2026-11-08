@@ -15,4 +15,4 @@ htmlcov/
 mutation.sqlite
 
 # esx eval output
-eval-results.json
+eval-results.jsonl

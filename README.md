@@ -58,15 +58,17 @@ conditions and scores each explanation a reader would see against the audit:
   and dropping whatever still fails.
 
 ```sh
-uv run esx eval --repeats 3 --output eval-results.json
+uv run esx eval --repeats 3 --output eval-results.jsonl
 ```
 
 It prints a table of explained, missed, invented and wrong-detail counts per
-condition, and writes every run to the `--output` file. A run where the model
-declines or breaks the schema counts as failed; a connection, rate-limit or
-server error after the SDK's retries counts as errored. Either way the
-evaluation moves on to the next run. Other API errors, such as a bad key, stop
-it.
+condition, and writes each run to the `--output` file as one JSON line as soon
+as it finishes, so a run that stops part-way keeps what it has paid for. A run
+where the model declines or breaks the schema counts as failed; a connection,
+rate-limit or server error after the SDK's retries counts as errored. Either way
+the evaluation moves on to the next run. Other API errors, such as a bad key,
+stop it. The corpus is capped at 100 cases and `--repeats` at 10, which bounds
+a run at about 3,000 model calls.
 
 ## Results
 

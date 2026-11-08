@@ -43,7 +43,7 @@ EXIT_FAILURE = 1
 TEXT_WIDTH_CHARACTERS = 80
 MAX_REPEATS = 10
 DEFAULT_CASES_PATH = "cases/cases.json"
-DEFAULT_RESULTS_PATH = "eval-results.json"
+DEFAULT_RESULTS_PATH = "eval-results.jsonl"
 
 GeneratorFactory = Callable[[str, str], Generate]
 """Builds a Generate from a model name and a system prompt."""
@@ -109,7 +109,7 @@ def _build_parser() -> argparse.ArgumentParser:
     eval_command.add_argument(
         "--output",
         default=DEFAULT_RESULTS_PATH,
-        help=f"where to write every run as JSON (default: {DEFAULT_RESULTS_PATH})",
+        help=f"where to write every run as JSON Lines (default: {DEFAULT_RESULTS_PATH})",
     )
     _add_model_option(eval_command)
     return parser
@@ -149,19 +149,16 @@ def _evaluate(args: argparse.Namespace, generator_for: GeneratorFactory) -> str:
     from_findings = generator_for(args.model, SYSTEM_PROMPT)
     from_records = generator_for(args.model, RAW_RECORDS_SYSTEM_PROMPT)
     runs: list[Run] = []
-    for run in evaluate(cases, from_findings, from_records, args.repeats):
-        progress = f"{run.repeat}  {run.domain}  {run.condition}: {_outcome_text(run.outcome)}"
-        print(progress, file=sys.stderr)
-        runs.append(run)
-    summaries = summarise(runs)
-    results = {
-        "model": args.model,
-        "repeats": args.repeats,
-        "summary": [_summary_fields(summary) for summary in summaries],
-        "runs": [_run_fields(run) for run in runs],
-    }
-    Path(args.output).write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
-    return _render_summary(summaries)
+    # Opened before the first model call, and each run is written as it finishes,
+    # so neither a bad path nor an error that stops the evaluation wastes paid calls.
+    with Path(args.output).open("w", encoding="utf-8") as output:
+        for run in evaluate(cases, from_findings, from_records, args.repeats):
+            progress = f"{run.repeat}  {run.domain}  {run.condition}: {_outcome_text(run.outcome)}"
+            print(progress, file=sys.stderr)
+            output.write(json.dumps(_run_fields(args.model, run)) + "\n")
+            output.flush()
+            runs.append(run)
+    return _render_summary(summarise(runs))
 
 
 def _heading(domain: str, findings: list[Finding]) -> str:
@@ -238,19 +235,15 @@ def _outcome_text(outcome: Score | Failure) -> str:
     )
 
 
-def _summary_fields(summary: ConditionSummary) -> dict[str, Any]:
-    return {
-        "condition": summary.condition,
-        "scored": summary.scored,
-        "failed": summary.failed,
-        "errored": summary.errored,
-        **dataclasses.asdict(summary.totals),
-    }
-
-
-def _run_fields(run: Run) -> dict[str, Any]:
+def _run_fields(model: str, run: Run) -> dict[str, Any]:
     if isinstance(run.outcome, Failure):
         outcome: dict[str, Any] = {"outcome": run.outcome.kind, "message": run.outcome.message}
     else:
         outcome = {"outcome": "scored", **dataclasses.asdict(run.outcome)}
-    return {"domain": run.domain, "repeat": run.repeat, "condition": run.condition, **outcome}
+    return {
+        "model": model,
+        "domain": run.domain,
+        "repeat": run.repeat,
+        "condition": run.condition,
+        **outcome,
+    }

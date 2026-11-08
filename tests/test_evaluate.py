@@ -8,6 +8,7 @@ import pytest
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import check
 from email_security_explainer.evaluate import (
+    MAX_CASES,
     Case,
     Condition,
     ConditionSummary,
@@ -310,3 +311,18 @@ def test_summarise_totals_each_condition() -> None:
             Condition.FINDINGS_CHECKED, scored=0, failed=0, errored=0, totals=Score(0, 0, 0, 0)
         ),
     ]
+
+
+def test_load_cases_rejects_more_cases_than_the_cap() -> None:
+    case = json.loads(case_json())[0]
+    cases = [{**case, "domain": f"case{number}.example"} for number in range(MAX_CASES + 1)]
+
+    with pytest.raises(ValueError, match=f"at most {MAX_CASES} cases, got {MAX_CASES + 1}"):
+        load_cases(json.dumps(cases))
+
+
+def test_load_cases_accepts_as_many_cases_as_the_cap() -> None:
+    case = json.loads(case_json())[0]
+    cases = [{**case, "domain": f"case{number}.example"} for number in range(MAX_CASES)]
+
+    assert len(load_cases(json.dumps(cases))) == MAX_CASES

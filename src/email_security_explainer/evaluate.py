@@ -42,6 +42,11 @@ _API_UNAVAILABLE = (
 )
 
 
+# Each case costs about three model calls per repeat, so this bounds the bill
+# together with the cap on repeats.
+MAX_CASES = 100
+
+
 class Condition(StrEnum):
     RAW_RECORDS = "raw_records"
     FINDINGS = "findings"
@@ -111,12 +116,16 @@ _CASE_FILE = pydantic.TypeAdapter(list[_CaseFields])
 def load_cases(text: str) -> list[Case]:
     """Parse a JSON case file.
 
-    Raises ValueError when the file is malformed, empty, names a domain twice,
-    or leaves out an include or redirect target that the audit needs.
+    Raises ValueError when the file is malformed, empty or longer than MAX_CASES,
+    names a domain twice, or leaves out an include or redirect target that the
+    audit needs.
     """
+    all_fields = _CASE_FILE.validate_json(text)
+    if len(all_fields) > MAX_CASES:
+        raise ValueError(f"expected at most {MAX_CASES} cases, got {len(all_fields)}")
     cases: list[Case] = []
     seen: set[str] = set()
-    for fields in _CASE_FILE.validate_json(text):
+    for fields in all_fields:
         domain = parse_domain(fields.domain)
         if domain in seen:
             raise ValueError(f"case {domain} appears more than once")
