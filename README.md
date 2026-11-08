@@ -59,5 +59,5 @@ The rule modules need full line and branch coverage:
 
 ```sh
 uv run coverage run --branch --source=email_security_explainer -m pytest
-uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py"
+uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
 ```
