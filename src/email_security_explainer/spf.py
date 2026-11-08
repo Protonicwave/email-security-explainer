@@ -67,6 +67,15 @@ class LookupWalk:
     unresolved: frozenset[str]
     unusable_targets: tuple[str, ...]
 
+    @property
+    def is_over_limit(self) -> bool:
+        return self.lookup_count > MAX_SPF_LOOKUPS
+
+    @property
+    def is_complete(self) -> bool:
+        """True when the walk needs no more records fetched to reach its verdict."""
+        return self.is_over_limit or not self.unresolved
+
 
 def normalise_target(domain_spec: str) -> str:
     return domain_spec.lower().rstrip(".")
@@ -256,9 +265,8 @@ def assess(
         Finding(FindingCode.SPF_PTR, term.text) for term in parsed.terms if term.name == "ptr"
     ]
     walk = walk_lookups(apex_txt, spf_by_domain)
-    is_over_limit = walk.lookup_count > MAX_SPF_LOOKUPS
-    assert is_over_limit or not walk.unresolved, f"targets not fetched: {sorted(walk.unresolved)}"
-    if is_over_limit:
+    assert walk.is_complete, f"targets not fetched: {sorted(walk.unresolved)}"
+    if walk.is_over_limit:
         findings.append(Finding(FindingCode.SPF_LOOKUP_LIMIT))
     findings += [Finding(FindingCode.SPF_TARGET_UNUSABLE, term) for term in walk.unusable_targets]
     return findings

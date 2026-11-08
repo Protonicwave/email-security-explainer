@@ -132,7 +132,7 @@ def load_cases(text: str) -> list[Case]:
         seen.add(domain)
         records = DnsRecords(fields.apex_txt, fields.dmarc_txt, fields.spf_by_domain)
         walk = spf.walk_lookups(records.apex_txt, records.spf_by_domain)
-        if walk.unresolved and walk.lookup_count <= spf.MAX_SPF_LOOKUPS:
+        if not walk.is_complete:
             missing = ", ".join(sorted(walk.unresolved))
             raise ValueError(f"case {domain} has no spf_by_domain entry for {missing}")
         cases.append(Case(domain, records))
