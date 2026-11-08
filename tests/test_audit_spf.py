@@ -98,6 +98,8 @@ def test_reports_gap(apex_txt: tuple[str, ...], expected: list[Finding]) -> None
         "ip6:g::1",
         "include:foo..bar.example.com",
         "include:.example.com",
+        "include:.",
+        "exists:a.example.com..",
         f"include:{LONGEST_LABEL}a.example.com",
         f"exists:{LONGEST_NAME}a",
         "include:caf\ufffd.example.com",
@@ -271,3 +273,13 @@ def test_walk_counts_no_lookup_for_other_modifiers() -> None:
 
 def test_walk_of_a_domain_without_one_valid_record_counts_nothing() -> None:
     assert walk_lookups((), {}).lookup_count == 0
+
+
+def test_walk_with_an_unfetched_target_within_the_limit_is_incomplete() -> None:
+    assert not walk_lookups(("v=spf1 include:gone.example.com -all",), {}).is_complete
+
+
+def test_walk_with_every_target_fetched_is_complete() -> None:
+    walk = walk_lookups(("v=spf1 include:a.example.com -all",), {"a.example.com": ("v=spf1 -all",)})
+
+    assert walk.is_complete

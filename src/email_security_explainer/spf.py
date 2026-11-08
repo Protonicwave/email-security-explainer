@@ -150,12 +150,14 @@ def _is_domain_spec(text: str) -> bool:
         # A macro expands per message, so only its expansion can be checked.
         return True
     name = text.removesuffix(".")
+    labels = name.split(".")
     # A backslash is an escape to a DNS library, not part of a name.
     return (
         name.isascii()
         and "\\" not in name
-        and 0 < len(name) <= MAX_DOMAIN_LENGTH
-        and all(0 < len(label) <= MAX_LABEL_LENGTH for label in name.split("."))
+        and len(name) <= MAX_DOMAIN_LENGTH
+        and "" not in labels
+        and all(len(label) <= MAX_LABEL_LENGTH for label in labels)
     )
 
 
