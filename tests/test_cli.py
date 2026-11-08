@@ -1,4 +1,6 @@
+import io
 import json
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -326,3 +328,32 @@ def test_eval_rejects_a_repeat_count_outside_the_cap(
 
     assert exit_info.value.code == 2
     assert "expected a whole number from 1 to 10" in capsys.readouterr().err
+
+
+def cp1252_stream(monkeypatch: pytest.MonkeyPatch, name: str) -> io.BytesIO:
+    buffer = io.BytesIO()
+    monkeypatch.setattr(sys, name, io.TextIOWrapper(buffer, encoding="cp1252"))
+    return buffer
+
+
+def test_output_the_console_code_page_cannot_hold_is_written_as_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    buffer = cp1252_stream(monkeypatch, "stdout")
+    table = {"example.com": ("v=spf1 ip4:192.0.2.1 caf� -all",)}
+
+    assert run(["audit", "example.com"], table) == EXIT_OK
+
+    sys.stdout.flush()
+    assert "caf�" in buffer.getvalue().decode("utf-8")
+
+
+def test_errors_the_console_code_page_cannot_hold_are_written_as_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    buffer = cp1252_stream(monkeypatch, "stderr")
+
+    assert run(["audit", "例..テスト"], CLEAN) == EXIT_FAILURE
+
+    sys.stderr.flush()
+    assert "例" in buffer.getvalue().decode("utf-8")

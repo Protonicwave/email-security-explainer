@@ -2,6 +2,7 @@
 
 import argparse
 import dataclasses
+import io
 import json
 import sys
 import textwrap
@@ -58,6 +59,11 @@ def main(
     lookup: TxtLookup = lookup_txt,
     generator_for: GeneratorFactory = _claude_generator_for,
 ) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        # Redirected output on Windows uses the ANSI code page, which cannot hold
+        # every character a TXT record, a model's answer or a typed domain may contain.
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")
     args = _build_parser().parse_args(argv)
     try:
         if args.command == "eval":
