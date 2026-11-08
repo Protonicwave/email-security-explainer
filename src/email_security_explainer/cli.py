@@ -1,20 +1,34 @@
-"""Command-line entry point: `esx audit <domain>` and `esx explain <domain>`."""
+"""Command-line entry point: `esx audit`, `esx explain` and `esx eval`."""
 
 import argparse
+import dataclasses
 import json
 import sys
 import textwrap
 from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import Any
 
 import anthropic
 
 from email_security_explainer.audit import audit
 from email_security_explainer.dns_fetch import DnsLookupError, TxtLookup, fetch_records, lookup_txt
 from email_security_explainer.domain import parse_domain
+from email_security_explainer.evaluate import (
+    ConditionSummary,
+    Failure,
+    Run,
+    Score,
+    evaluate,
+    load_cases,
+    summarise,
+)
 from email_security_explainer.explain import (
     DEFAULT_MODEL,
     MAX_API_RETRIES,
+    RAW_RECORDS_SYSTEM_PROMPT,
     REQUEST_TIMEOUT_SECONDS,
+    SYSTEM_PROMPT,
     ExplainResult,
     ExplanationError,
     Generate,
@@ -26,31 +40,37 @@ from email_security_explainer.findings import Finding
 EXIT_OK = 0
 EXIT_FAILURE = 1
 TEXT_WIDTH_CHARACTERS = 80
+MAX_REPEATS = 10
+DEFAULT_CASES_PATH = "cases/cases.json"
+DEFAULT_RESULTS_PATH = "eval-results.json"
+
+GeneratorFactory = Callable[[str, str], Generate]
+"""Builds a Generate from a model name and a system prompt."""
 
 
-def _claude_generator_for(model: str) -> Generate:
+def _claude_generator_for(model: str, system_prompt: str) -> Generate:
     client = anthropic.Anthropic(timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_API_RETRIES)
-    return claude_generator(client, model)
+    return claude_generator(client, model, system_prompt)
 
 
 def main(
     argv: Sequence[str] | None = None,
     lookup: TxtLookup = lookup_txt,
-    generator_for: Callable[[str], Generate] = _claude_generator_for,
+    generator_for: GeneratorFactory = _claude_generator_for,
 ) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        domain = parse_domain(args.domain)
-        records = fetch_records(domain, lookup)
-        findings = audit(records)
-        if args.command == "audit":
-            output = _render_json(domain, findings) if args.json else _render_text(domain, findings)
-        elif not findings:
-            output = _render_text(domain, findings)
+        if args.command == "eval":
+            output = _evaluate(args, generator_for)
         else:
-            result = explain(domain, findings, records, generator_for(args.model))
-            output = _render_explanation(domain, findings, result)
-    except (ValueError, DnsLookupError, ExplanationError, anthropic.AnthropicError) as err:
+            output = _audit_or_explain(args, lookup, generator_for)
+    except (
+        OSError,
+        ValueError,
+        DnsLookupError,
+        ExplanationError,
+        anthropic.AnthropicError,
+    ) as err:
         print(f"esx: {err}", file=sys.stderr)
         return EXIT_FAILURE
     print(output)
@@ -67,10 +87,75 @@ def _build_parser() -> argparse.ArgumentParser:
         "explain", help="explain a domain's SPF and DMARC gaps in plain English"
     )
     explain_command.add_argument("domain", help="domain to explain, such as example.com")
-    explain_command.add_argument(
+    _add_model_option(explain_command)
+    eval_command = commands.add_parser(
+        "eval", help="score explanations from three conditions on a case corpus"
+    )
+    eval_command.add_argument(
+        "--cases", default=DEFAULT_CASES_PATH, help=f"case file (default: {DEFAULT_CASES_PATH})"
+    )
+    eval_command.add_argument(
+        "--repeats",
+        type=_repeat_count,
+        default=1,
+        help=f"times to run every case, 1 to {MAX_REPEATS} (default: 1)",
+    )
+    eval_command.add_argument(
+        "--output",
+        default=DEFAULT_RESULTS_PATH,
+        help=f"where to write every run as JSON (default: {DEFAULT_RESULTS_PATH})",
+    )
+    _add_model_option(eval_command)
+    return parser
+
+
+def _add_model_option(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
         "--model", default=DEFAULT_MODEL, help=f"Claude model to use (default: {DEFAULT_MODEL})"
     )
-    return parser
+
+
+def _repeat_count(text: str) -> int:
+    # Each repeat costs about three model calls per case, so the cap bounds the bill.
+    if not (text.isascii() and text.isdigit() and 1 <= int(text) <= MAX_REPEATS):
+        raise argparse.ArgumentTypeError(
+            f"expected a whole number from 1 to {MAX_REPEATS}, got {text!r}"
+        )
+    return int(text)
+
+
+def _audit_or_explain(
+    args: argparse.Namespace, lookup: TxtLookup, generator_for: GeneratorFactory
+) -> str:
+    domain = parse_domain(args.domain)
+    records = fetch_records(domain, lookup)
+    findings = audit(records)
+    if args.command == "audit":
+        return _render_json(domain, findings) if args.json else _render_text(domain, findings)
+    if not findings:
+        return _render_text(domain, findings)
+    result = explain(domain, findings, records, generator_for(args.model, SYSTEM_PROMPT))
+    return _render_explanation(domain, findings, result)
+
+
+def _evaluate(args: argparse.Namespace, generator_for: GeneratorFactory) -> str:
+    cases = load_cases(Path(args.cases).read_text(encoding="utf-8"))
+    from_findings = generator_for(args.model, SYSTEM_PROMPT)
+    from_records = generator_for(args.model, RAW_RECORDS_SYSTEM_PROMPT)
+    runs: list[Run] = []
+    for run in evaluate(cases, from_findings, from_records, args.repeats):
+        progress = f"{run.repeat}  {run.domain}  {run.condition}: {_outcome_text(run.outcome)}"
+        print(progress, file=sys.stderr)
+        runs.append(run)
+    summaries = summarise(runs)
+    results = {
+        "model": args.model,
+        "repeats": args.repeats,
+        "summary": [_summary_fields(summary) for summary in summaries],
+        "runs": [_run_fields(run) for run in runs],
+    }
+    Path(args.output).write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+    return _render_summary(summaries)
 
 
 def _heading(domain: str, findings: list[Finding]) -> str:
@@ -125,3 +210,41 @@ def _wrap(text: str, indent: str = "  ") -> str:
     return textwrap.fill(
         text, width=TEXT_WIDTH_CHARACTERS, initial_indent=indent, subsequent_indent=indent
     )
+
+
+def _render_summary(summaries: list[ConditionSummary]) -> str:
+    lines = ["condition         scored  failed  errored  explained  missed  invented  wrong detail"]
+    lines += [
+        f"{summary.condition:<16}  {summary.scored:>6}  {summary.failed:>6}  "
+        f"{summary.errored:>7}  {summary.totals.explained:>9}  {summary.totals.missed:>6}  "
+        f"{summary.totals.invented:>8}  {summary.totals.wrong_detail:>12}"
+        for summary in summaries
+    ]
+    return "\n".join(lines)
+
+
+def _outcome_text(outcome: Score | Failure) -> str:
+    if isinstance(outcome, Failure):
+        return f"{outcome.kind} ({outcome.message})"
+    return (
+        f"explained {outcome.explained}, missed {outcome.missed}, "
+        f"invented {outcome.invented}, wrong detail {outcome.wrong_detail}"
+    )
+
+
+def _summary_fields(summary: ConditionSummary) -> dict[str, Any]:
+    return {
+        "condition": summary.condition,
+        "scored": summary.scored,
+        "failed": summary.failed,
+        "errored": summary.errored,
+        **dataclasses.asdict(summary.totals),
+    }
+
+
+def _run_fields(run: Run) -> dict[str, Any]:
+    if isinstance(run.outcome, Failure):
+        outcome: dict[str, Any] = {"outcome": run.outcome.kind, "message": run.outcome.message}
+    else:
+        outcome = {"outcome": "scored", **dataclasses.asdict(run.outcome)}
+    return {"domain": run.domain, "repeat": run.repeat, "condition": run.condition, **outcome}

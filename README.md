@@ -47,6 +47,27 @@ failing after that is dropped, and findings left unexplained are listed by
 code. The command exits 1 when the model declines, stops early, returns output
 outside the schema, or the API cannot be reached.
 
+`esx eval` measures what the claim check is worth. It runs every case in
+`cases/cases.json` (recorded records for 21 domains, so no live DNS) under three
+conditions and scores each explanation a reader would see against the audit:
+
+- `raw_records`: the model sees only the records and the auditor's rules, and
+  finds the problems itself;
+- `findings`: the model explains the auditor's findings, shown unchecked;
+- `findings_checked`: that same answer after the claim check, one repair round
+  and dropping whatever still fails.
+
+```sh
+uv run esx eval --repeats 3 --output eval-results.json
+```
+
+It prints a table of explained, missed, invented and wrong-detail counts per
+condition, and writes every run to the `--output` file. A run where the model
+declines or breaks the schema counts as failed; a connection, rate-limit or
+server error after the SDK's retries counts as errored. Either way the
+evaluation moves on to the next run. Other API errors, such as a bad key, stop
+it.
+
 ## What it checks
 
 SPF (RFC 7208): a missing or duplicated record, syntax errors, `+all`, `?all`,

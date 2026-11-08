@@ -1,5 +1,6 @@
 import json
 from collections.abc import Mapping
+from pathlib import Path
 
 import anthropic
 import httpx2
@@ -7,7 +8,13 @@ import pytest
 
 from email_security_explainer.cli import EXIT_FAILURE, EXIT_OK, main
 from email_security_explainer.dns_fetch import DnsLookupError
-from email_security_explainer.explain import DEFAULT_MODEL, ExplanationError, Generate
+from email_security_explainer.explain import (
+    DEFAULT_MODEL,
+    RAW_RECORDS_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    ExplanationError,
+    Generate,
+)
 from email_security_explainer.findings import FindingCode, RecordKind
 from email_security_explainer.schema import Claim, Explanation
 
@@ -102,7 +109,7 @@ def explain_with(answer: Explanation, models: list[str] | None = None) -> int:
     def lookup(name: str) -> tuple[str, ...] | None:
         return SOFTFAIL.get(name, ())
 
-    def generator_for(model: str) -> Generate:
+    def generator_for(model: str, system_prompt: str) -> Generate:
         if models is not None:
             models.append(model)
         return lambda request: answer
@@ -140,7 +147,7 @@ def test_explain_lists_findings_left_unexplained(capsys: pytest.CaptureFixture[s
 
 
 def test_explain_skips_the_model_for_a_clean_domain(capsys: pytest.CaptureFixture[str]) -> None:
-    def generator_for(model: str) -> Generate:
+    def generator_for(model: str, system_prompt: str) -> Generate:
         raise AssertionError("the model should not be called")
 
     assert (
@@ -152,7 +159,7 @@ def test_explain_skips_the_model_for_a_clean_domain(capsys: pytest.CaptureFixtur
 def test_explain_passes_the_chosen_model(capsys: pytest.CaptureFixture[str]) -> None:
     models: list[str] = []
 
-    def generator_for(model: str) -> Generate:
+    def generator_for(model: str, system_prompt: str) -> Generate:
         models.append(model)
         return lambda request: explanation_with(softfail_claim(), policy_claim())
 
@@ -174,7 +181,7 @@ def test_explain_fails_when_the_model_fails(
     def failing_model(request: str) -> Explanation:
         raise error
 
-    def generator_for(model: str) -> Generate:
+    def generator_for(model: str, system_prompt: str) -> Generate:
         return failing_model
 
     assert (
@@ -194,3 +201,128 @@ def test_explain_omits_a_summary_that_failed_the_check(
     assert explain_with(answer) == EXIT_OK
 
     assert capsys.readouterr().out.startswith("example.com: 2 findings\n\nmedium  SPF_SOFTFAIL")
+
+
+CLEAN_ANSWER = Explanation(summary="Fine.", claims=[])
+EVAL_CASE = {
+    "domain": "softfail.example",
+    "apex_txt": ["v=spf1 ~all"],
+    "dmarc_txt": ["v=DMARC1; p=none; rua=mailto:d@example.com"],
+    "spf_by_domain": {},
+}
+
+
+def run_eval(
+    tmp_path: Path, *options: str, prompts: list[tuple[str, str]] | None = None
+) -> tuple[int, Path]:
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps([EVAL_CASE]), encoding="utf-8")
+    output = tmp_path / "results.json"
+
+    def generator_for(model: str, system_prompt: str) -> Generate:
+        if prompts is not None:
+            prompts.append((model, system_prompt))
+        return lambda request: explanation_with(softfail_claim())
+
+    argv = ["eval", "--cases", str(cases), "--output", str(output), *options]
+    return main(argv, generator_for=generator_for), output
+
+
+def test_eval_prints_a_summary_per_condition(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code, _ = run_eval(tmp_path, "--repeats", "2")
+
+    assert exit_code == EXIT_OK
+    assert capsys.readouterr().out.splitlines() == [
+        "condition         scored  failed  errored  explained  missed  invented  wrong detail",
+        "raw_records            2       0        0          2       2         0             0",
+        "findings               2       0        0          2       2         0             0",
+        "findings_checked       2       0        0          2       2         0             0",
+    ]
+
+
+def test_eval_reports_progress_for_every_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run_eval(tmp_path)
+
+    assert capsys.readouterr().err.splitlines()[0] == (
+        "1  softfail.example  raw_records: explained 1, missed 1, invented 0, wrong detail 0"
+    )
+
+
+def test_eval_writes_every_run_as_json(tmp_path: Path) -> None:
+    _, output = run_eval(tmp_path, "--model", "claude-test")
+
+    results = json.loads(output.read_text(encoding="utf-8"))
+    assert results["model"] == "claude-test"
+    assert results["repeats"] == 1
+    assert results["summary"][0] == {
+        "condition": "raw_records",
+        "scored": 1,
+        "failed": 0,
+        "errored": 0,
+        "explained": 1,
+        "invented": 0,
+        "missed": 1,
+        "wrong_detail": 0,
+    }
+    assert results["runs"][0] == {
+        "domain": "softfail.example",
+        "repeat": 1,
+        "condition": "raw_records",
+        "outcome": "scored",
+        "explained": 1,
+        "invented": 0,
+        "missed": 1,
+        "wrong_detail": 0,
+    }
+
+
+def test_eval_records_a_failed_run_with_its_message(tmp_path: Path) -> None:
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps([EVAL_CASE]), encoding="utf-8")
+    output = tmp_path / "results.json"
+
+    def declining_model(request: str) -> Explanation:
+        raise ExplanationError("claude-test declined to explain (category: cyber)")
+
+    argv = ["eval", "--cases", str(cases), "--output", str(output)]
+    assert main(argv, generator_for=lambda model, prompt: declining_model) == EXIT_OK
+
+    run = json.loads(output.read_text(encoding="utf-8"))["runs"][0]
+    assert run["outcome"] == "no_explanation"
+    assert run["message"] == "claude-test declined to explain (category: cyber)"
+
+
+def test_eval_gives_each_condition_its_system_prompt(tmp_path: Path) -> None:
+    prompts: list[tuple[str, str]] = []
+
+    run_eval(tmp_path, "--model", "claude-test", prompts=prompts)
+
+    assert sorted(prompts) == sorted(
+        [("claude-test", SYSTEM_PROMPT), ("claude-test", RAW_RECORDS_SYSTEM_PROMPT)]
+    )
+
+
+def test_eval_fails_when_the_case_file_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["eval", "--cases", str(tmp_path / "absent.json")]
+
+    assert main(argv, generator_for=lambda model, prompt: lambda request: CLEAN_ANSWER) == (
+        EXIT_FAILURE
+    )
+    assert "absent.json" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("repeats", ["0", "11", "two", "-1", "²"])
+def test_eval_rejects_a_repeat_count_outside_the_cap(
+    repeats: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["eval", "--repeats", repeats])
+
+    assert exit_info.value.code == 2
+    assert "expected a whole number from 1 to 10" in capsys.readouterr().err

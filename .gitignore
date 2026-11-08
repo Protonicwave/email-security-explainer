@@ -13,3 +13,6 @@ htmlcov/
 
 # cosmic-ray
 mutation.sqlite
+
+# esx eval output
+eval-results.json
