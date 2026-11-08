@@ -243,7 +243,7 @@ def test_token_comparison_ignores_case_and_surrounding_punctuation() -> None:
 
 
 def test_ordinary_words_are_not_read_as_tokens() -> None:
-    explanation = "A catch-all rule lets all senders through; set the p tag and pct = 50 later."
+    explanation = "A catch-all rule lets all senders through; set the p tag later."
 
     report = run_check([claim(FindingCode.SPF_SOFTFAIL, "~all", explanation=explanation)])
 
@@ -299,3 +299,32 @@ def test_claim_check_stores_no_instance_dictionary() -> None:
 
 def test_report_stores_no_instance_dictionary() -> None:
     assert not hasattr(run_check(CLEAN_CLAIMS), "__dict__")
+
+
+def test_spaces_around_equals_do_not_hide_a_token() -> None:
+    explanation = "Your record says p = reject, so forged mail is blocked."
+
+    report = run_check([claim(FindingCode.SPF_SOFTFAIL, "~all", explanation=explanation)])
+
+    assert report.claim_checks[0].unsupported_tokens == ("p=reject",)
+
+
+def test_curly_quotes_around_a_token_are_not_part_of_it() -> None:
+    explanation = "Your record says \u2018p=none\u2019 and \u201c~all\u201d."
+
+    report = run_check([claim(FindingCode.SPF_SOFTFAIL, "~all", explanation=explanation)])
+
+    assert report.claim_checks[0].verdict is Verdict.ACCEPTED
+
+
+def test_each_address_in_a_report_list_is_supported() -> None:
+    records = DnsRecords(
+        apex_txt=("v=spf1 ~all",),
+        dmarc_txt=("v=DMARC1; p=none; rua=mailto:a@reports.example, mailto:b@reports.example",),
+    )
+    explanation = "Reports go to rua=mailto:b@reports.example and rua=mailto:a@reports.example."
+    softfail = claim(FindingCode.SPF_SOFTFAIL, "~all", explanation=explanation)
+
+    report = run_check([softfail], findings=audit(records), records=records)
+
+    assert report.claim_checks[0].verdict is Verdict.ACCEPTED

@@ -17,7 +17,7 @@ from email_security_explainer.audit import DnsRecords
 from email_security_explainer.findings import Finding
 from email_security_explainer.schema import Claim, Explanation
 
-_TERM_VALUE = r"[^\s;,'\"`()\[\]]+"
+_TERM_VALUE = r"[^\s;,'\"`()\[\]\u2018\u2019\u201c\u201d]+"
 # Record tokens a reader could take for a quotation of their own record. The
 # lookbehind keeps words such as "catch-all" and "sp=" from matching "-all" and "p=".
 _RECORD_TOKEN = re.compile(
@@ -26,8 +26,12 @@ _RECORD_TOKEN = re.compile(
     rf"|(?:redirect|p|sp|pct|rua|ruf|adkim|aspf)={_TERM_VALUE})",
     re.IGNORECASE,
 )
-# RFC 7489 section 6.4 allows whitespace around "=" in a DMARC tag.
+# RFC 7489 section 6.4 allows whitespace around "=" in a DMARC tag, and prose
+# that writes p = reject still quotes a record value.
 _SPACE_AROUND_EQUALS = re.compile(r"\s*=\s*")
+# RFC 7489 section 6.2: rua and ruf hold comma-separated URIs, and prose may
+# quote any one of them.
+_URI_LIST = re.compile(r"(?<![\w-])(rua|ruf)\s*=\s*([^;]+)", re.IGNORECASE)
 _TRAILING_PUNCTUATION = ".:!?"
 
 
@@ -111,8 +115,13 @@ def _record_tokens(records: DnsRecords) -> frozenset[str]:
         *records.dmarc_txt,
         *(text for txt in records.spf_by_domain.values() for text in spf.select_records(txt)),
     ]
-    return frozenset(
-        token for text in texts for token in _tokens(_SPACE_AROUND_EQUALS.sub("=", text))
+    return frozenset(token for text in texts for token in _tokens(_split_uri_lists(text)))
+
+
+def _split_uri_lists(record: str) -> str:
+    return _URI_LIST.sub(
+        lambda match: " ".join(f"{match[1]}={uri.strip()}" for uri in match[2].split(",")),
+        record,
     )
 
 
@@ -121,5 +130,5 @@ def _unsupported_tokens(prose: str, record_tokens: frozenset[str]) -> tuple[str,
 
 
 def _tokens(text: str) -> Iterator[str]:
-    for match in _RECORD_TOKEN.finditer(text):
+    for match in _RECORD_TOKEN.finditer(_SPACE_AROUND_EQUALS.sub("=", text)):
         yield match.group().rstrip(_TRAILING_PUNCTUATION).lower()
