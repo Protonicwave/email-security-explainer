@@ -1,5 +1,6 @@
 """Ask Claude to explain the audit findings, then hold its answer to them."""
 
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import assert_never
@@ -25,8 +26,9 @@ heard of SPF or DMARC. An automated auditor has already decided what is wrong; \
 your job is to explain its findings, not to look for new ones.
 
 Write one claim per finding, in the order given, and no others. Copy each \
-finding's code and record exactly. Set quoted_value to the finding's evidence \
-exactly as given, or null when the evidence is "none"."""
+finding's code and record exactly. Set quoted_value to the finding's evidence, \
+the text inside the quotation marks, exactly as given, or null when the evidence \
+is null."""
 
 _RAW_RECORDS_TASK = """\
 You explain email security problems to the owner of a domain who has never \
@@ -187,7 +189,7 @@ def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecor
     lines = [raw_records_request(domain, records), "", "Findings:"]
     lines += [
         f"{number}. {finding.code} ({finding.record} record, {finding.severity} severity), "
-        f"evidence: {finding.evidence or 'none'}"
+        f"evidence: {_evidence_text(finding)}"
         for number, finding in enumerate(findings, start=1)
     ]
     if not findings:
@@ -206,6 +208,12 @@ def raw_records_request(domain: str, records: DnsRecords) -> str:
     return "\n".join(lines)
 
 
+def _evidence_text(finding: Finding) -> str:
+    # JSON keeps evidence that reads "none", such as a stray DMARC tag, apart from
+    # a finding with no evidence at all.
+    return json.dumps(finding.evidence)
+
+
 def _record_lines(label: str, records: Sequence[str]) -> list[str]:
     return [f"{label}: {record}" for record in records] or [f"{label}: none"]
 
@@ -217,7 +225,7 @@ def _repair_request(request: str, explanation: Explanation, report: CheckReport)
         if (problem := _claim_problem(number, claim_check)) is not None
     ]
     problems += [
-        f"No claim explains {finding.code} with evidence {finding.evidence or 'none'}."
+        f"No claim explains {finding.code} with evidence {_evidence_text(finding)}."
         for finding in report.missed
     ]
     if report.summary_unsupported_tokens:

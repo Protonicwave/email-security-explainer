@@ -83,9 +83,9 @@ def test_request_shows_the_records_and_findings() -> None:
         "v=spf1 ip4:192.0.2.0/24 -all",
         "",
         "Findings:",
-        "1. SPF_SOFTFAIL (spf record, medium severity), evidence: ~all",
-        "2. DMARC_POLICY_NONE (dmarc record, high severity), evidence: p=none",
-        "3. DMARC_NO_RUA (dmarc record, low severity), evidence: none",
+        '1. SPF_SOFTFAIL (spf record, medium severity), evidence: "~all"',
+        '2. DMARC_POLICY_NONE (dmarc record, high severity), evidence: "p=none"',
+        "3. DMARC_NO_RUA (dmarc record, low severity), evidence: null",
     ]
 
 
@@ -132,8 +132,8 @@ def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
         "- Claim 5 (DMARC_POLICY_NONE) repeats a finding another claim already explains. "
         "Remove it.",
         "- Claim 6 (DMARC_NO_RUA) names the spf record; this finding is about another.",
-        "- No claim explains SPF_SOFTFAIL with evidence ~all.",
-        "- No claim explains DMARC_NO_RUA with evidence none.",
+        '- No claim explains SPF_SOFTFAIL with evidence "~all".',
+        "- No claim explains DMARC_NO_RUA with evidence null.",
         "- The summary quotes p=reject; the summary must quote no record values.",
     ]
 
@@ -255,3 +255,16 @@ def test_generator_sends_the_system_prompt_it_is_given() -> None:
     claude_generator(api.client(), "claude-test", RAW_RECORDS_SYSTEM_PROMPT)("the request")
 
     assert api.sent[0]["system"] == RAW_RECORDS_SYSTEM_PROMPT
+
+
+def test_request_tells_evidence_reading_none_apart_from_no_evidence() -> None:
+    records = DnsRecords(
+        apex_txt=("v=spf1 -all",), dmarc_txt=("v=DMARC1; p=reject; rua=mailto:d@example.com; none",)
+    )
+    model = ScriptedModel(Explanation(summary=SUMMARY, claims=[]), CLEAN)
+
+    explain("example.com", audit(records), records, model)
+
+    assert model.requests[0].splitlines()[-1] == (
+        '1. DMARC_SYNTAX (dmarc record, high severity), evidence: "none"'
+    )
