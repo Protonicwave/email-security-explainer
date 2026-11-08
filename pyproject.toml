@@ -9,7 +9,14 @@ authors = [
     { name = "Shlok Bhusal", email = "92551449+Protonicwave@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "anthropic>=2.6",
+    "dnspython>=2.7",
+    "pydantic>=2.12",
+]
+
+[project.scripts]
+esx = "email_security_explainer.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
@@ -21,6 +28,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "PT", "N", "C90", "PLR"]
+# Assertions guard internal invariants; input is validated with exceptions.
+ignore = ["S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -31,7 +40,7 @@ max-complexity = 10
 
 [tool.mypy]
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,9 +53,36 @@ branch = true
 
 [dependency-groups]
 dev = [
+    "cosmic-ray>=8.8.0",
     "coverage>=7.17.2",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
     "vulture>=2.16",
+]
+
+# Mutation testing of the claim checker and the rules it trusts. Run with the
+# commands in the README.
+[cosmic-ray]
+module-path = [
+    "src/email_security_explainer/claims.py",
+    "src/email_security_explainer/audit.py",
+    "src/email_security_explainer/spf.py",
+    "src/email_security_explainer/dmarc.py",
+]
+timeout = 60.0
+excluded-modules = []
+test-command = "pytest -x -q -p no:cacheprovider tests/test_claims.py tests/test_audit_spf.py tests/test_audit_dmarc.py"
+
+[cosmic-ray.distributor]
+name = "local"
+
+# Enum members are singletons, so `is` and `==` (or `is not` and `!=`) cannot be
+# told apart, and `<=` against Verdict.ACCEPTED matches only that member because
+# its value sorts first. These mutants are equivalent, not untested.
+[cosmic-ray.filters.operators-filter]
+exclude-operators = [
+    "core/ReplaceComparisonOperator_Is_Eq",
+    "core/ReplaceComparisonOperator_Is_LtE",
+    "core/ReplaceComparisonOperator_IsNot_NotEq",
 ]

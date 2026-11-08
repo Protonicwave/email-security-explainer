@@ -10,3 +10,9 @@ dist/
 .coverage
 htmlcov/
 .env
+
+# cosmic-ray
+mutation.sqlite
+
+# esx eval output
+eval-results.jsonl

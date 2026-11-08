@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run vulture src --min-confidence 80
+      - run: uv run coverage run --branch --source=email_security_explainer -m pytest
+      - run: >-
+          uv run coverage report --show-missing --fail-under=100
+          --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
+
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run cosmic-ray init pyproject.toml mutation.sqlite
+      - run: uv run cr-filter-operators mutation.sqlite pyproject.toml
+      - run: uv run cr-filter-pragma mutation.sqlite
+      - run: uv run cosmic-ray baseline pyproject.toml
+      - run: uv run cosmic-ray exec pyproject.toml mutation.sqlite
+      - run: uv run cr-report mutation.sqlite --surviving-only --show-diff
+      # cr-rate treats --fail-over 0 as unset, so any positive threshold below one mutant works.
+      - run: uv run cr-rate mutation.sqlite --fail-over 0.1
