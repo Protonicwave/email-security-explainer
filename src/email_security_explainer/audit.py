@@ -7,7 +7,9 @@ from email_security_explainer import dmarc, spf
 from email_security_explainer.findings import Finding
 
 
-@dataclass(frozen=True, slots=True)
+# Mutating these flags changes nothing a test can see: mypy rejects writes to a
+# frozen dataclass, and slots only saves memory.
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class DnsRecords:
     """TXT records for one domain.
 

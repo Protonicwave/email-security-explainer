@@ -4,6 +4,7 @@ import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.findings import Finding, FindingCode, RecordKind, Severity
+from email_security_explainer.spf import walk_lookups
 
 ENFORCING_DMARC = "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
 
@@ -30,6 +31,11 @@ def test_clean_record_has_no_findings() -> None:
         "V=SPF1 IP4:192.0.2.1 -ALL",
         "v=spf1  ip4:192.0.2.1   -all",
         "v=spf1 include:%{d}.spf.example.com -all",
+        "v=spf1 ip4:192.0.2.1/32 -all",
+        "v=spf1 ip4:192.0.2.1/24 -all",
+        "v=spf1 ip6:2001:db8::1/128 -all",
+        "v=spf1 a/32 -all",
+        "v=spf1 mx//128 -all",
     ],
 )
 def test_valid_syntax_has_no_findings(record: str) -> None:
@@ -47,6 +53,7 @@ def test_valid_syntax_has_no_findings(record: str) -> None:
         (("v=spf1 all",), [Finding(FindingCode.SPF_ALL_PASS, "all")]),
         (("v=spf1 ?all",), [Finding(FindingCode.SPF_ALL_NEUTRAL, "?all")]),
         (("v=spf1 ip4:192.0.2.1",), [Finding(FindingCode.SPF_NO_ALL)]),
+        (("v=spf1 ip4:192.0.2.1 x-note=1",), [Finding(FindingCode.SPF_NO_ALL)]),
         (("v=spf1",), [Finding(FindingCode.SPF_NO_ALL)]),
         (("v=spf1 ptr -all",), [Finding(FindingCode.SPF_PTR, "ptr")]),
         (
@@ -78,6 +85,10 @@ def test_reports_gap(apex_txt: tuple[str, ...], expected: list[Finding]) -> None
         "a:",
         "-all:example.com",
         "ptr:",
+        "ptr:/24",
+        "include:/24",
+        "exists:/24",
+        "ip6:g::1",
         "exp=",
         "redirect=",
     ],
@@ -103,6 +114,7 @@ def test_syntax_errors_suppress_other_rules() -> None:
         ("v=DMARC1; p=none; rua=mailto:d@example.com", True),
         ("v=DMARC1; p=reject; pct=50; rua=mailto:d@example.com", True),
         ("not a dmarc record", True),
+        ("v=DMARC1; p=bogus; rua=mailto:d@example.com", True),
     ],
 )
 def test_softfail_reported_only_without_enforcing_dmarc(dmarc: str, is_reported: bool) -> None:
@@ -200,3 +212,41 @@ def test_include_loop_exceeds_limit() -> None:
 def test_every_code_has_a_severity() -> None:
     for code in FindingCode:
         assert isinstance(Finding(code).severity, Severity)
+
+
+def test_softfail_reported_when_dmarc_records_conflict() -> None:
+    records = DnsRecords(apex_txt=("v=spf1 ~all",), dmarc_txt=(ENFORCING_DMARC, ENFORCING_DMARC))
+
+    assert Finding(FindingCode.SPF_SOFTFAIL, "~all") in audit(records)
+
+
+def test_lookup_limit_holds_when_targets_beyond_it_were_never_fetched() -> None:
+    includes = " ".join(f"include:h{index}.example.com" for index in range(11))
+    assert spf_findings((f"v=spf1 {includes} -all",)) == [Finding(FindingCode.SPF_LOOKUP_LIMIT)]
+
+
+def test_walk_counts_lookups_after_terms_that_need_none() -> None:
+    assert walk_lookups(("v=spf1 ip4:192.0.2.1 a mx -all",), {}).lookup_count == 2
+
+
+def test_walk_counts_lookups_after_an_unfetched_target() -> None:
+    walk = walk_lookups(("v=spf1 include:gone.example.com a mx -all",), {})
+
+    assert walk.lookup_count == 3
+    assert walk.unresolved == {"gone.example.com"}
+
+
+def test_walk_counts_redirect_alongside_mechanisms_when_there_is_no_all() -> None:
+    walk = walk_lookups(
+        ("v=spf1 a mx redirect=a.example.com",), {"a.example.com": ("v=spf1 -all",)}
+    )
+
+    assert walk.lookup_count == 3
+
+
+def test_walk_counts_no_lookup_for_other_modifiers() -> None:
+    assert walk_lookups(("v=spf1 exp=explain.example.com x-note=1",), {}).lookup_count == 0
+
+
+def test_walk_of_a_domain_without_one_valid_record_counts_nothing() -> None:
+    assert walk_lookups((), {}).lookup_count == 0

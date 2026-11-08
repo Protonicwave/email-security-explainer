@@ -20,6 +20,7 @@ def dmarc_findings(dmarc_txt: tuple[str, ...]) -> list[Finding]:
         f"v = DMARC1 ; P = Reject ; {RUA.upper()}",
         f"v=DMARC1; p=reject; {RUA};",
         f"v=DMARC1; p=reject; fo=1; adkim=s; {RUA}",
+        f"v=DMARC1;; p=reject; {RUA}",
     ],
 )
 def test_enforcing_record_has_no_findings(record: str) -> None:
@@ -69,4 +70,4 @@ def test_reports_gap(dmarc_txt: tuple[str, ...], expected: list[Finding]) -> Non
     ],
 )
 def test_malformed_record_is_syntax_error(record: str, evidence: str | None) -> None:
-    assert Finding(FindingCode.DMARC_SYNTAX, evidence) in dmarc_findings((record,))
+    assert dmarc_findings((record,)) == [Finding(FindingCode.DMARC_SYNTAX, evidence)]

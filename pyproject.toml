@@ -61,12 +61,18 @@ dev = [
     "vulture>=2.16",
 ]
 
-# Mutation testing of the claim checker. Run with the commands in the README.
+# Mutation testing of the claim checker and the rules it trusts. Run with the
+# commands in the README.
 [cosmic-ray]
-module-path = "src/email_security_explainer/claims.py"
+module-path = [
+    "src/email_security_explainer/claims.py",
+    "src/email_security_explainer/audit.py",
+    "src/email_security_explainer/spf.py",
+    "src/email_security_explainer/dmarc.py",
+]
 timeout = 60.0
 excluded-modules = []
-test-command = "pytest -x -q -p no:cacheprovider tests/test_claims.py"
+test-command = "pytest -x -q -p no:cacheprovider tests/test_claims.py tests/test_audit_spf.py tests/test_audit_dmarc.py"
 
 [cosmic-ray.distributor]
 name = "local"

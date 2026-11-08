@@ -25,7 +25,9 @@ _ALL_FINDING_BY_QUALIFIER = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+# Mutating these flags changes nothing a test can see: mypy rejects writes to a
+# frozen dataclass, and slots only saves memory.
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class Term:
     text: str
     name: str
@@ -34,7 +36,7 @@ class Term:
     is_modifier: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class ParsedRecord:
     terms: tuple[Term, ...]
     invalid_terms: tuple[str, ...]
@@ -44,7 +46,7 @@ class ParsedRecord:
         return any(term.name == "all" and not term.is_modifier for term in self.terms)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class LookupWalk:
     """The result of following include and redirect terms through `spf_by_domain`.
 
@@ -75,7 +77,8 @@ def parse_record(record: str) -> ParsedRecord:
     terms: list[Term] = []
     invalid_terms: list[str] = []
     seen_modifiers: set[str] = set()
-    for token in record.split(" ")[1:]:
+    _version, _, terms_text = record.partition(" ")
+    for token in terms_text.split(" "):
         if not token:
             continue
         term = _parse_term(token)
@@ -109,11 +112,11 @@ def _parse_term(token: str) -> Term | None:
 def _has_valid_argument(name: str, rest: str) -> bool:
     match name:
         case "all":
-            return rest == ""
+            return not rest
         case "include" | "exists":
             return rest.startswith(":") and _is_domain_spec(rest[1:])
         case "ptr":
-            return rest == "" or (rest.startswith(":") and _is_domain_spec(rest[1:]))
+            return not rest or (rest.startswith(":") and _is_domain_spec(rest[1:]))
         case "a" | "mx":
             return _is_dual_cidr(rest)
         case "ip4":
@@ -183,11 +186,12 @@ def walk_lookups(
 
 
 def _single_valid_record(txt_records: tuple[str, ...]) -> ParsedRecord | None:
-    records = select_records(txt_records)
-    if len(records) != 1:
-        return None
-    parsed = parse_record(records[0])
-    return None if parsed.invalid_terms else parsed
+    match select_records(txt_records):
+        case (record,):
+            parsed = parse_record(record)
+            return None if parsed.invalid_terms else parsed
+        case _:
+            return None
 
 
 def _causes_lookup(term: Term, record_has_all: bool) -> bool:
@@ -208,15 +212,16 @@ def _followable_target(term: Term) -> str | None:
 def assess(
     apex_txt: tuple[str, ...],
     spf_by_domain: Mapping[str, tuple[str, ...]],
-    *,
+    *,  # pragma: no mutate: mutated to /, keyword callers still work
     is_dmarc_enforcing: bool,
 ) -> list[Finding]:
-    records = select_records(apex_txt)
-    if not records:
-        return [Finding(FindingCode.SPF_MISSING)]
-    if len(records) > 1:
-        return [Finding(FindingCode.SPF_MULTIPLE)]
-    parsed = parse_record(records[0])
+    match select_records(apex_txt):
+        case ():
+            return [Finding(FindingCode.SPF_MISSING)]
+        case (record,):
+            parsed = parse_record(record)
+        case _:
+            return [Finding(FindingCode.SPF_MULTIPLE)]
     if parsed.invalid_terms:
         return [Finding(FindingCode.SPF_SYNTAX, term) for term in parsed.invalid_terms]
     findings = _all_mechanism_findings(parsed, is_dmarc_enforcing=is_dmarc_enforcing)
@@ -232,7 +237,11 @@ def assess(
     return findings
 
 
-def _all_mechanism_findings(parsed: ParsedRecord, *, is_dmarc_enforcing: bool) -> list[Finding]:
+def _all_mechanism_findings(
+    parsed: ParsedRecord,
+    *,  # pragma: no mutate: mutated to /, keyword callers still work
+    is_dmarc_enforcing: bool,
+) -> list[Finding]:
     all_term = next(
         (term for term in parsed.terms if term.name == "all" and not term.is_modifier), None
     )
@@ -242,6 +251,8 @@ def _all_mechanism_findings(parsed: ParsedRecord, *, is_dmarc_enforcing: bool) -
     code = _ALL_FINDING_BY_QUALIFIER.get(all_term.qualifier)
     # A soft fail is accepted practice when DMARC already rejects or quarantines
     # unauthenticated mail; without that, receivers usually deliver it.
-    if code is None or (code is FindingCode.SPF_SOFTFAIL and is_dmarc_enforcing):
+    # Mutating `is` to `>=` is equivalent: SPF_SOFTFAIL sorts after the other two codes.
+    is_tolerated = code is FindingCode.SPF_SOFTFAIL and is_dmarc_enforcing  # pragma: no mutate
+    if code is None or is_tolerated:
         return []
     return [Finding(code, all_term.text)]

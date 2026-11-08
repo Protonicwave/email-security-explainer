@@ -100,12 +100,15 @@ uv run coverage run --branch --source=email_security_explainer -m pytest
 uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
 ```
 
-The claim check also has a mutation test with cosmic-ray, which must leave no
-surviving mutant. CI runs it on Ubuntu; it also runs on Windows:
+The claim check and the SPF and DMARC rules it trusts also have a mutation test
+with cosmic-ray, which must leave no surviving mutant. CI runs it on Ubuntu; it
+also runs on Windows, where it takes about five minutes. Lines whose only
+surviving mutants are equivalent to the original carry `# pragma: no mutate`:
 
 ```sh
 uv run cosmic-ray init pyproject.toml mutation.sqlite
 uv run cr-filter-operators mutation.sqlite pyproject.toml
+uv run cr-filter-pragma mutation.sqlite
 uv run cosmic-ray exec pyproject.toml mutation.sqlite
 uv run cr-rate mutation.sqlite --fail-over 0.1
 ```
