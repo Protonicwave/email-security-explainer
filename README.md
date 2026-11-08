@@ -30,6 +30,23 @@ Each finding names the record token it rests on. The command exits 1 when the
 domain is malformed, does not exist, or DNS fails; a DNS failure is never
 reported as a missing record.
 
+`esx explain` asks Claude to explain each finding in plain English for someone
+who has never heard of SPF or DMARC:
+
+```sh
+uv run esx explain example.com
+uv run esx explain example.com --model claude-opus-5-5
+```
+
+It needs an Anthropic API key in `ANTHROPIC_API_KEY`; the default model is
+`claude-sonnet-5-5`. Every claim in the answer is checked against the findings.
+A claim must name a finding the audit produced, quote its record token exactly,
+and quote no record value that the domain's records do not contain. An answer
+that fails gets one repair round with the problems listed; anything still
+failing after that is dropped, and findings left unexplained are listed by
+code. The command exits 1 when the model declines, stops early, returns output
+outside the schema, or the API cannot be reached.
+
 ## What it checks
 
 SPF (RFC 7208): a missing or duplicated record, syntax errors, `+all`, `?all`,
