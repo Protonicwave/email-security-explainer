@@ -63,7 +63,7 @@ def test_clean_answer_is_returned_without_a_repair_round() -> None:
     result = explain("example.com", FINDINGS, RECORDS, model)
 
     assert result.explanation == CLEAN
-    assert result.report.is_clean
+    assert result.last_answer_check.is_clean
     assert len(model.requests) == 1
 
 
@@ -118,7 +118,7 @@ def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
 
     result = explain("example.com", FINDINGS, RECORDS, model)
 
-    assert result.report.is_clean
+    assert result.last_answer_check.is_clean
     repair = model.requests[1]
     assert repair.startswith(model.requests[0])
     assert first.model_dump_json() in repair
@@ -146,12 +146,12 @@ def test_parts_still_failing_after_repair_are_dropped() -> None:
 
     assert len(model.requests) == 2
     assert result.explanation == Explanation(summary="", claims=CLEAN.claims[:2])
-    assert [check.verdict for check in result.report.claim_checks] == [
+    assert [check.verdict for check in result.last_answer_check.claim_checks] == [
         Verdict.INVENTED,
         Verdict.ACCEPTED,
         Verdict.ACCEPTED,
     ]
-    assert result.report.missed == (Finding(FindingCode.DMARC_NO_RUA),)
+    assert result.last_answer_check.missed == (Finding(FindingCode.DMARC_NO_RUA),)
 
 
 def test_model_failure_propagates() -> None:

@@ -117,11 +117,12 @@ class ExplanationError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class ExplainResult:
-    """`explanation` keeps only the parts that passed the claim check; `report`
-    is the check of the model's last answer before anything was dropped."""
+    """`explanation` is what the reader is shown: the model's last answer with
+    every part that failed the claim check dropped. `last_answer_check` is the
+    check of that answer before anything was dropped."""
 
     explanation: Explanation
-    report: CheckReport
+    last_answer_check: CheckReport
 
 
 def explain(

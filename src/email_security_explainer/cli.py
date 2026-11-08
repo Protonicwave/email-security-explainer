@@ -200,10 +200,10 @@ def _render_explanation(domain: str, findings: list[Finding], result: ExplainRes
         finding = Finding(claim.finding_code, claim.quoted_value)
         heading = f"{finding.severity}  {finding.code}  {finding.evidence or ''}".rstrip()
         blocks.append("\n".join([heading, _wrap(claim.explanation), _wrap(f"Fix: {claim.fix}")]))
-    if result.report.missed:
+    if result.last_answer_check.missed:
         unexplained = [
             f"  {finding.code}  {finding.evidence or ''}".rstrip()
-            for finding in result.report.missed
+            for finding in result.last_answer_check.missed
         ]
         blocks.append("\n".join(["Not explained (failed the claim check):", *unexplained]))
     return "\n\n".join(blocks)
