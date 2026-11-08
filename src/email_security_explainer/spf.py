@@ -5,16 +5,24 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from email_security_explainer.domain import MAX_DOMAIN_LENGTH
 from email_security_explainer.findings import Finding, FindingCode
 
 # RFC 7208 section 4.6.4: more than ten DNS-querying terms is a permanent error.
 MAX_SPF_LOOKUPS = 10
 MAX_IP4_PREFIX_BITS = 32
 MAX_IP6_PREFIX_BITS = 128
+MAX_LABEL_LENGTH = 63
 
 _MODIFIER = re.compile(r"(?P<name>[A-Za-z][A-Za-z0-9_.-]*)=(?P<value>.*)")
 _MECHANISM = re.compile(r"(?P<qualifier>[-+~?]?)(?P<name>[A-Za-z][A-Za-z0-9_.-]*)(?P<rest>.*)")
-_DUAL_CIDR = re.compile(r"(?::(?P<domain>[^/]+))?(?:/(?P<ip4>\d{1,2}))?(?://(?P<ip6>\d{1,3}))?")
+_PREFIX_LENGTH = re.compile(r"0|[1-9][0-9]{0,2}", re.ASCII)
+_DUAL_CIDR = re.compile(
+    r"(?::(?P<domain>[^/]+))?"
+    rf"(?:/(?P<ip4>{_PREFIX_LENGTH.pattern}))?"
+    rf"(?://(?P<ip6>{_PREFIX_LENGTH.pattern}))?",
+    re.ASCII,
+)
 _MECHANISMS = frozenset({"all", "include", "a", "mx", "ptr", "ip4", "ip6", "exists"})
 _LOOKUP_MECHANISMS = frozenset({"include", "a", "mx", "ptr", "exists"})
 _SINGLE_USE_MODIFIERS = frozenset({"redirect", "exp"})
@@ -127,22 +135,41 @@ def _has_valid_argument(name: str, rest: str) -> bool:
 
 
 def _is_domain_spec(text: str) -> bool:
-    return bool(text) and "/" not in text
+    if "/" in text:
+        return False
+    if "%" in text:
+        # A macro expands per message, so only its expansion can be checked.
+        return True
+    name = text.removesuffix(".")
+    # A backslash is an escape to a DNS library, not part of a name.
+    return (
+        name.isascii()
+        and "\\" not in name
+        and 0 < len(name) <= MAX_DOMAIN_LENGTH
+        and all(0 < len(label) <= MAX_LABEL_LENGTH for label in name.split("."))
+    )
 
 
 def _is_dual_cidr(rest: str) -> bool:
     match = _DUAL_CIDR.fullmatch(rest)
     if match is None:
         return False
-    ip4, ip6 = match["ip4"], match["ip6"]
-    return (ip4 is None or int(ip4) <= MAX_IP4_PREFIX_BITS) and (
-        ip6 is None or int(ip6) <= MAX_IP6_PREFIX_BITS
+    domain, ip4, ip6 = match["domain"], match["ip4"], match["ip6"]
+    return (
+        (domain is None or _is_domain_spec(domain))
+        and (ip4 is None or int(ip4) <= MAX_IP4_PREFIX_BITS)
+        and (ip6 is None or int(ip6) <= MAX_IP6_PREFIX_BITS)
     )
 
 
 def _is_network(
     text: str, network_type: type[ipaddress.IPv4Network | ipaddress.IPv6Network]
 ) -> bool:
+    address, has_prefix, prefix = text.partition("/")
+    # RFC 7208 section 5.6 allows only a decimal prefix length, which rules out
+    # the netmasks, leading zeros and zone IDs that ipaddress would accept.
+    if "%" in address or (has_prefix and not _PREFIX_LENGTH.fullmatch(prefix)):
+        return False
     try:
         network_type(text, strict=False)
     except ValueError:

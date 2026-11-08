@@ -7,6 +7,9 @@ from email_security_explainer.findings import Finding, FindingCode, RecordKind, 
 from email_security_explainer.spf import walk_lookups
 
 ENFORCING_DMARC = "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
+LONGEST_LABEL = "a" * 63
+# 253 characters, the most a domain name may have.
+LONGEST_NAME = ".".join([LONGEST_LABEL] * 3 + ["a" * 61])
 
 
 def spf_findings(
@@ -36,6 +39,10 @@ def test_clean_record_has_no_findings() -> None:
         "v=spf1 ip6:2001:db8::1/128 -all",
         "v=spf1 a/32 -all",
         "v=spf1 mx//128 -all",
+        "v=spf1 a/0 mx//0 -all",
+        f"v=spf1 exists:{LONGEST_LABEL}.example.com -all",
+        f"v=spf1 exists:{LONGEST_NAME} -all",
+        f"v=spf1 exists:{LONGEST_NAME}. -all",
     ],
 )
 def test_valid_syntax_has_no_findings(record: str) -> None:
@@ -89,6 +96,20 @@ def test_reports_gap(apex_txt: tuple[str, ...], expected: list[Finding]) -> None
         "include:/24",
         "exists:/24",
         "ip6:g::1",
+        "include:foo..bar.example.com",
+        "include:.example.com",
+        f"include:{LONGEST_LABEL}a.example.com",
+        f"exists:{LONGEST_NAME}a",
+        "include:caf\ufffd.example.com",
+        "include:a\\b.example.com",
+        "redirect=a..example.com",
+        "ip4:192.0.2.0/255.255.255.0",
+        "ip4:192.0.2.1/032",
+        "ip6:fe80::1%eth0",
+        "ip6:2001:db8::/064",
+        "a/03",
+        "mx//064",
+        "a:foo..bar.example.com",
         "exp=",
         "redirect=",
     ],
