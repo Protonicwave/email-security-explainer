@@ -79,20 +79,26 @@ condition:
 | Condition | Scored | Failed | Errored | Explained | Missed | Invented | Wrong detail |
 |---|---|---|---|---|---|---|---|
 | `raw_records` | 63 | 0 | 0 | 102 | 0 | 0 | 0 |
-| `findings` | 63 | 0 | 0 | 102 | 0 | 0 | 0 |
+| `findings` | 63 | 0 | 0 | 101 | 1 | 0 | 1 |
 | `findings_checked` | 63 | 0 | 0 | 102 | 0 | 0 | 0 |
 
-Every condition explained every finding, with no invented problem and no wrong
-detail, so on this corpus the claim check had nothing to remove. The run does
-not separate the conditions, and it does not show that the check is unnecessary.
-The cases are textbook misconfigurations with at most three findings each, and
-the `raw_records` condition is given the auditor's rules in words, which turns
-finding the problems into applying a written checklist to short records. The
-guarantee that no claim reaches the reader unless it matches a finding rests on
-the claim check's unit and mutation tests, not on this run. Telling the
-conditions apart needs harder cases: include chains close to the lookup limit,
-records that hit a rule's exception, and records copied from real domains. Every
-run is in `results/claude-sonnet-5-5.json`.
+The model made one mistake in 189 answers. In one `findings` answer for
+`dmarc-without-policy.example`, a claim failed the check on a detail, either the
+evidence it quoted or a record value in its prose, so its finding counted as
+missed. The run file records the counts but not the claim, so which of the two
+it was is not known. The repair round fixed it, and the checked condition
+explained every finding. In `findings_checked`, invented and wrong-detail claims
+are zero by construction, because the check drops them before the reader sees
+anything; what that row measures is how many findings survive, here all 102. One
+mistake does not separate the conditions, and the run does not show that the
+check is unnecessary. The cases are textbook misconfigurations with at most
+three findings each, and the `raw_records` condition is given the auditor's
+rules in words, which turns finding the problems into applying a written
+checklist to short records. The guarantee that no claim reaches the reader
+unless it matches a finding rests on the claim check's unit and mutation tests,
+not on this run. Telling the conditions apart needs harder cases: include chains
+close to the lookup limit, records that hit a rule's exception, and records
+copied from real domains. Every run is in `results/claude-sonnet-5-5.jsonl`.
 
 ## What it checks
 
