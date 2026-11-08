@@ -26,9 +26,8 @@ heard of SPF or DMARC. An automated auditor has already decided what is wrong; \
 your job is to explain its findings, not to look for new ones.
 
 Write one claim per finding, in the order given, and no others. Copy each \
-finding's code and record exactly. Set quoted_value to the finding's evidence, \
-the text inside the quotation marks, exactly as given, or null when the evidence \
-is null."""
+finding's code exactly. Set quoted_value to the finding's evidence, the text \
+inside the quotation marks, exactly as given, or null when the evidence is null."""
 
 _RAW_RECORDS_TASK = """\
 You explain email security problems to the owner of a domain who has never \
@@ -36,7 +35,7 @@ heard of SPF or DMARC. You are shown the domain's SPF and DMARC records; your \
 job is to find which of the problems listed below they have, and explain each one.
 
 Write one claim for each problem the records have, and none for a problem they \
-do not have. Set record to the record the problem is in. Set quoted_value to \
+do not have. Set quoted_value to \
 the record token the problem rests on, copied exactly from the record, or null \
 where the list says the token is null.
 
@@ -254,8 +253,6 @@ def _claim_problem(number: int, claim_check: ClaimCheck) -> str | None:
             return None
         case Verdict.INVENTED:
             return f"{prefix} explains a problem the audit did not find. Remove it."
-        case Verdict.WRONG_RECORD:
-            return f"{prefix} names the {claim.record} record; this finding is about another."
         case Verdict.WRONG_DETAIL:
             return f"{prefix} quotes {claim.quoted_value!r}, which is not the finding's evidence."
         case Verdict.DUPLICATE:

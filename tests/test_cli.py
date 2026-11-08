@@ -17,7 +17,7 @@ from email_security_explainer.explain import (
     ExplanationError,
     Generate,
 )
-from email_security_explainer.findings import FindingCode, RecordKind
+from email_security_explainer.findings import FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 CLEAN = {
@@ -90,7 +90,6 @@ def explanation_with(*claims: Claim) -> Explanation:
 def softfail_claim() -> Claim:
     return Claim(
         finding_code=FindingCode.SPF_SOFTFAIL,
-        record=RecordKind.SPF,
         quoted_value="~all",
         explanation="Receivers are told to accept forged mail and only mark it.",
         fix="Change ~all to -all.",
@@ -100,7 +99,6 @@ def softfail_claim() -> Claim:
 def policy_claim() -> Claim:
     return Claim(
         finding_code=FindingCode.DMARC_POLICY_NONE,
-        record=RecordKind.DMARC,
         quoted_value="p=none",
         explanation="Your DMARC record asks receivers to deliver mail that fails.",
         fix="Set p=quarantine once reports show only your own servers.",

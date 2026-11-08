@@ -38,7 +38,6 @@ _TRAILING_PUNCTUATION = ".:!?"
 class Verdict(StrEnum):
     ACCEPTED = "accepted"
     INVENTED = "invented"
-    WRONG_RECORD = "wrong_record"
     WRONG_DETAIL = "wrong_detail"
     DUPLICATE = "duplicate"
     UNSUPPORTED_TOKEN = "unsupported_token"  # noqa: S105 (a verdict, not a password)
@@ -97,8 +96,6 @@ def _check_claim(
     claimed = Finding(claim.finding_code, claim.quoted_value)
     if claim.finding_code not in {finding.code for finding in findings}:
         return ClaimCheck(claim, Verdict.INVENTED)
-    if claim.record is not claimed.record:
-        return ClaimCheck(claim, Verdict.WRONG_RECORD)
     if claimed not in findings:
         return ClaimCheck(claim, Verdict.WRONG_DETAIL)
     if claimed not in uncovered:

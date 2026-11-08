@@ -14,7 +14,7 @@ from email_security_explainer.explain import (
     claude_generator,
     explain,
 )
-from email_security_explainer.findings import Finding, FindingCode, RecordKind
+from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 RECORDS = DnsRecords(
@@ -29,7 +29,6 @@ SUMMARY = "Anyone can send mail as example.com and most of it will be delivered.
 def claim(code: FindingCode, quoted_value: str | None, explanation: str = "Plain.") -> Claim:
     return Claim(
         finding_code=code,
-        record=Finding(code).record,
         quoted_value=quoted_value,
         explanation=explanation,
         fix="Tighten the record.",
@@ -113,7 +112,6 @@ def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
             claim(FindingCode.DMARC_POLICY_NONE, "p=none", explanation="Unlike sp=reject."),
             claim(FindingCode.DMARC_POLICY_NONE, "p=none"),
             claim(FindingCode.DMARC_POLICY_NONE, "p=none"),
-            claim(FindingCode.DMARC_NO_RUA, None).model_copy(update={"record": RecordKind.SPF}),
         ],
     )
     model = ScriptedModel(first, CLEAN)
@@ -131,7 +129,6 @@ def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
         "- Claim 3 (DMARC_POLICY_NONE) quotes sp=reject, which the records do not contain.",
         "- Claim 5 (DMARC_POLICY_NONE) repeats a finding another claim already explains. "
         "Remove it.",
-        "- Claim 6 (DMARC_NO_RUA) names the spf record; this finding is about another.",
         '- No claim explains SPF_SOFTFAIL with evidence "~all".',
         "- No claim explains DMARC_NO_RUA with evidence null.",
         "- The summary quotes p=reject; the summary must quote no record values.",

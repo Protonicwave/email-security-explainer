@@ -2,14 +2,13 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from email_security_explainer.findings import FindingCode, RecordKind
+from email_security_explainer.findings import FindingCode
 
 
 class Claim(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     finding_code: FindingCode = Field(description="The code of the finding this claim explains.")
-    record: RecordKind = Field(description="The record the finding is about.")
     quoted_value: str | None = Field(
         description="The finding's evidence token copied exactly, or null when it has none."
     )

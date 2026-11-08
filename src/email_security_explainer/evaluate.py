@@ -161,8 +161,7 @@ def score(report: CheckReport) -> Score:
         explained=verdicts[Verdict.ACCEPTED],
         invented=verdicts[Verdict.INVENTED],
         missed=len(report.missed),
-        wrong_detail=verdicts[Verdict.WRONG_RECORD]
-        + verdicts[Verdict.WRONG_DETAIL]
+        wrong_detail=verdicts[Verdict.WRONG_DETAIL]
         + verdicts[Verdict.UNSUPPORTED_TOKEN]
         + bool(report.summary_unsupported_tokens),
     )

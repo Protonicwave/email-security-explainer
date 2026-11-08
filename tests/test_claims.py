@@ -4,7 +4,7 @@ import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import CheckReport, Verdict, check
-from email_security_explainer.findings import Finding, FindingCode, RecordKind
+from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 RECORDS = DnsRecords(
@@ -26,13 +26,11 @@ def claim(
     code: FindingCode,
     quoted_value: str | None,
     *,
-    record: RecordKind | None = None,
     explanation: str = PLAIN_EXPLANATION,
     fix: str = "Tighten the record.",
 ) -> Claim:
     return Claim(
         finding_code=code,
-        record=record or Finding(code).record,
         quoted_value=quoted_value,
         explanation=explanation,
         fix=fix,
@@ -117,24 +115,6 @@ def test_quoting_a_value_for_an_absent_tag_is_wrong_detail() -> None:
 
     assert verdicts(report)[2] is Verdict.WRONG_DETAIL
     assert report.missed == (Finding(FindingCode.DMARC_NO_RUA),)
-
-
-def test_claim_naming_the_wrong_record_is_wrong_record() -> None:
-    misfiled = claim(FindingCode.SPF_SOFTFAIL, "~all", record=RecordKind.DMARC)
-
-    report = run_check([misfiled, *CLEAN_CLAIMS[1:]])
-
-    assert verdicts(report)[0] is Verdict.WRONG_RECORD
-    assert report.missed == (Finding(FindingCode.SPF_SOFTFAIL, "~all"),)
-
-
-def test_dmarc_claim_naming_the_spf_record_is_wrong_record() -> None:
-    misfiled = claim(FindingCode.DMARC_POLICY_NONE, "p = none", record=RecordKind.SPF)
-
-    report = run_check([CLEAN_CLAIMS[0], misfiled, CLEAN_CLAIMS[2]])
-
-    assert verdicts(report)[1] is Verdict.WRONG_RECORD
-    assert report.missed == (Finding(FindingCode.DMARC_POLICY_NONE, "p = none"),)
 
 
 def test_second_claim_for_one_finding_is_duplicate() -> None:

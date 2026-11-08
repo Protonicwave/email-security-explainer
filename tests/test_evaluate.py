@@ -22,7 +22,7 @@ from email_security_explainer.evaluate import (
     summarise,
 )
 from email_security_explainer.explain import ExplanationError
-from email_security_explainer.findings import Finding, FindingCode, RecordKind
+from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 CORPUS = Path(__file__).parent.parent / "cases" / "cases.json"
@@ -37,7 +37,6 @@ CASE = Case("softfail.example", RECORDS)
 def claim(code: FindingCode, quoted_value: str | None, explanation: str = "Plain.") -> Claim:
     return Claim(
         finding_code=code,
-        record=Finding(code).record,
         quoted_value=quoted_value,
         explanation=explanation,
         fix="Tighten the record.",
@@ -140,14 +139,13 @@ def test_score_counts_each_kind_of_error() -> None:
         claims=[
             INVENTED,
             WRONG_DETAIL,
-            POLICY_NONE.model_copy(update={"record": RecordKind.SPF}),
             claim(FindingCode.DMARC_NO_RUA, None, explanation="Unlike sp=reject."),
         ],
     )
 
     report = check(FINDINGS, explanation, RECORDS)
 
-    assert score(report) == Score(explained=0, invented=1, missed=3, wrong_detail=4)
+    assert score(report) == Score(explained=0, invented=1, missed=3, wrong_detail=3)
 
 
 def test_score_ignores_a_duplicate_of_an_explained_finding() -> None:
