@@ -1,0 +1,236 @@
+[
+  {
+    "domain": "softfail-no-dmarc.example",
+    "apex_txt": [
+      "v=spf1 ip4:192.0.2.0/24 ~all",
+      "google-site-verification=abc123"
+    ],
+    "dmarc_txt": [],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "softfail-monitoring-only.example",
+    "apex_txt": [
+      "v=spf1 ip4:198.51.100.25 mx ~all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=none; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "softfail-enforced.example",
+    "apex_txt": [
+      "v=spf1 ip4:203.0.113.0/24 ~all",
+      "MS=ms12345678"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "clean-provider-include.example",
+    "apex_txt": [
+      "v=spf1 include:_spf.mailprovider.example ip4:192.0.2.10 -all",
+      "google-site-verification=def456"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=quarantine; rua=mailto:dmarc@reports.example; adkim=s"
+    ],
+    "spf_by_domain": {
+      "_spf.mailprovider.example": [
+        "v=spf1 ip4:198.51.100.0/24 ip6:2001:db8::/32 -all"
+      ]
+    }
+  },
+  {
+    "domain": "clean-strict-ip.example",
+    "apex_txt": [
+      "v=spf1 ip4:203.0.113.5 ip4:203.0.113.6 -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "clean-mx-a.example",
+    "apex_txt": [
+      "v=spf1 mx a -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; sp=quarantine; pct=100; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "no-email-auth.example",
+    "apex_txt": [
+      "google-site-verification=ghi789"
+    ],
+    "dmarc_txt": [],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "duplicate-spf-monitoring.example",
+    "apex_txt": [
+      "v=spf1 ip4:192.0.2.0/24 -all",
+      "v=spf1 include:_spf.mailprovider.example -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=none; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "typos-in-records.example",
+    "apex_txt": [
+      "v=spf1 ip4:192.0.2.10 ip:203.0.113.5 -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=quarentine; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "open-relay-spf.example",
+    "apex_txt": [
+      "v=spf1 a mx +all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "neutral-partial-rollout.example",
+    "apex_txt": [
+      "v=spf1 ip4:198.51.100.0/24 ?all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=quarantine; pct=50; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "no-all-subdomain-open.example",
+    "apex_txt": [
+      "v=spf1 ip4:203.0.113.0/24"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; sp=none; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "legacy-ptr.example",
+    "apex_txt": [
+      "v=spf1 ptr ip4:192.0.2.0/24 -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=quarantine"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "too-many-includes.example",
+    "apex_txt": [
+      "v=spf1 include:spf.mail-a.example include:spf.mail-b.example include:spf.mail-c.example -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=none; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {
+      "spf.mail-a.example": [
+        "v=spf1 a mx include:deep.mail-d.example -all"
+      ],
+      "spf.mail-b.example": [
+        "v=spf1 a mx ip4:198.51.100.0/24 -all"
+      ],
+      "spf.mail-c.example": [
+        "v=spf1 a mx ip6:2001:db8::/32 -all"
+      ],
+      "deep.mail-d.example": [
+        "v=spf1 a mx -all"
+      ]
+    }
+  },
+  {
+    "domain": "redirect-to-group.example",
+    "apex_txt": [
+      "v=spf1 redirect=_spf.group.example"
+    ],
+    "dmarc_txt": [],
+    "spf_by_domain": {
+      "_spf.group.example": [
+        "v=spf1 ip4:192.0.2.0/24 ip4:203.0.113.0/24 -all"
+      ]
+    }
+  },
+  {
+    "domain": "vanished-include.example",
+    "apex_txt": [
+      "v=spf1 include:mailer.retired.example -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject"
+    ],
+    "spf_by_domain": {
+      "mailer.retired.example": []
+    }
+  },
+  {
+    "domain": "broken-include-softfail.example",
+    "apex_txt": [
+      "v=spf1 include:mail.broken.example ~all"
+    ],
+    "dmarc_txt": [],
+    "spf_by_domain": {
+      "mail.broken.example": [
+        "v=spf1 ip4:192.0.2.999 -all"
+      ]
+    }
+  },
+  {
+    "domain": "duplicate-dmarc.example",
+    "apex_txt": [
+      "v=spf1 ip4:198.51.100.0/24 ~all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; rua=mailto:dmarc@reports.example",
+      "v=DMARC1; p=none; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "partial-enforcement.example",
+    "apex_txt": [
+      "v=spf1 mx ~all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; pct=25; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "bad-pct-open-subdomains.example",
+    "apex_txt": [
+      "v=spf1 ip4:203.0.113.0/24 -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; p=reject; sp=none; pct=abc; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  },
+  {
+    "domain": "dmarc-without-policy.example",
+    "apex_txt": [
+      "v=spf1 ptr -all"
+    ],
+    "dmarc_txt": [
+      "v=DMARC1; rua=mailto:dmarc@reports.example"
+    ],
+    "spf_by_domain": {}
+  }
+]

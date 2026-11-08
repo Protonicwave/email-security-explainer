@@ -11,7 +11,7 @@ from anthropic.types import JSONOutputFormatParam
 from email_security_explainer import spf
 from email_security_explainer.audit import DnsRecords
 from email_security_explainer.claims import CheckReport, ClaimCheck, Verdict, check
-from email_security_explainer.findings import Finding
+from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Explanation
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
@@ -19,15 +19,64 @@ MAX_OUTPUT_TOKENS = 16000
 REQUEST_TIMEOUT_SECONDS = 120.0
 MAX_API_RETRIES = 2
 
-SYSTEM_PROMPT = """\
+_FINDINGS_TASK = """\
 You explain email security problems to the owner of a domain who has never \
 heard of SPF or DMARC. An automated auditor has already decided what is wrong; \
 your job is to explain its findings, not to look for new ones.
 
 Write one claim per finding, in the order given, and no others. Copy each \
 finding's code and record exactly. Set quoted_value to the finding's evidence \
-exactly as given, or null when the evidence is "none".
+exactly as given, or null when the evidence is "none"."""
 
+_RAW_RECORDS_TASK = """\
+You explain email security problems to the owner of a domain who has never \
+heard of SPF or DMARC. You are shown the domain's SPF and DMARC records; your \
+job is to find which of the problems listed below they have, and explain each one.
+
+Write one claim for each problem the records have, and none for a problem they \
+do not have. Set record to the record the problem is in. Set quoted_value to \
+the record token the problem rests on, copied exactly from the record, or null \
+where the list says the token is null.
+
+The problems, by code:"""
+
+# The auditor's rules in words, so a model shown only the records is held to
+# the same rulebook as the auditor rather than to its own idea of a problem.
+_PROBLEM_BY_CODE = {
+    FindingCode.SPF_MISSING: "no TXT record at the domain starts with v=spf1. Token: null.",
+    FindingCode.SPF_MULTIPLE: "more than one TXT record starts with v=spf1. Token: null.",
+    FindingCode.SPF_SYNTAX: "the SPF record has a term SPF syntax does not allow; one claim per "
+    "such term. Token: the term. A missing, duplicated or malformed SPF record has no other "
+    "SPF problem.",
+    FindingCode.SPF_ALL_PASS: "the all term passes every sender: +all, or all with no "
+    "qualifier. Token: the all term.",
+    FindingCode.SPF_ALL_NEUTRAL: "the all term is ?all. Token: ?all.",
+    FindingCode.SPF_NO_ALL: "the SPF record has neither an all term nor a redirect. Token: null.",
+    FindingCode.SPF_SOFTFAIL: "the all term is ~all and DMARC does not enforce: DMARC is "
+    "missing or duplicated, has no valid p tag, has p=none, or has pct below 100. Token: ~all.",
+    FindingCode.SPF_PTR: "the SPF record uses the ptr mechanism; one claim per ptr term. "
+    "Token: the term.",
+    FindingCode.SPF_LOOKUP_LIMIT: "more than 10 DNS-querying terms (include, a, mx, ptr, "
+    "exists, and redirect when the record has no all term) across the SPF record and every "
+    "record it includes or redirects to. Token: null.",
+    FindingCode.SPF_TARGET_UNUSABLE: "an include or redirect points at a domain without "
+    "exactly one SPF record free of syntax errors. Token: the include or redirect term.",
+    FindingCode.DMARC_MISSING: "no TXT record at _dmarc.<domain> starts with v=DMARC1. "
+    "Token: null.",
+    FindingCode.DMARC_MULTIPLE: "more than one DMARC record. Token: null. A missing or "
+    "duplicated DMARC record has no other DMARC problem.",
+    FindingCode.DMARC_SYNTAX: "a tag has no = or appears twice (token: the tag as written); "
+    "p is not none, quarantine or reject (token: the p tag, or null when there is no p tag, "
+    "and then the record has no other DMARC problem); pct is not a whole number from 0 to 100 "
+    "(token: the pct tag); or sp is not one of the three policies (token: the sp tag).",
+    FindingCode.DMARC_POLICY_NONE: "p=none. Token: the p tag.",
+    FindingCode.DMARC_PARTIAL_PCT: "pct below 100 with p=quarantine or p=reject. Token: the "
+    "pct tag.",
+    FindingCode.DMARC_SUBDOMAIN_NONE: "sp=none with p=quarantine or p=reject. Token: the sp tag.",
+    FindingCode.DMARC_NO_RUA: "the DMARC record has no rua tag. Token: null.",
+}
+
+_STYLE = """\
 In each explanation, start from what an impersonator could do: send mail that \
 appears to come from the domain and still reach inboxes. Explain the record's \
 job in plain words the first time it comes up, for example "SPF, a list the \
@@ -43,6 +92,16 @@ quotes no record values.
 
 Use UK English and plain sentences. No headings, lists or emphasis inside the \
 text fields."""
+
+SYSTEM_PROMPT = f"{_FINDINGS_TASK}\n\n{_STYLE}"
+RAW_RECORDS_SYSTEM_PROMPT = "\n".join(
+    [
+        _RAW_RECORDS_TASK,
+        *(f"- {code}: {problem}" for code, problem in _PROBLEM_BY_CODE.items()),
+        "",
+        _STYLE,
+    ]
+)
 
 Generate = Callable[[str], Explanation]
 """Sends one request to a model and returns its explanation.
@@ -71,8 +130,22 @@ def explain(
 
     Raises ExplanationError from `generate`.
     """
-    request = _request(domain, findings, records)
-    explanation = generate(request)
+    request = findings_request(domain, findings, records)
+    return check_and_repair(request, generate(request), findings, records, generate)
+
+
+def check_and_repair(
+    request: str,
+    explanation: Explanation,
+    findings: Sequence[Finding],
+    records: DnsRecords,
+    generate: Generate,
+) -> ExplainResult:
+    """Check `explanation`, the answer to `request`; if it fails, ask `generate`
+    once to repair it, then drop whatever still fails.
+
+    Raises ExplanationError from `generate`.
+    """
     report = check(findings, explanation, records)
     if not report.is_clean:
         explanation = generate(_repair_request(request, explanation, report))
@@ -80,7 +153,9 @@ def explain(
     return ExplainResult(_passed_parts(explanation, report), report)
 
 
-def claude_generator(client: anthropic.Anthropic, model: str) -> Generate:
+def claude_generator(
+    client: anthropic.Anthropic, model: str, system_prompt: str = SYSTEM_PROMPT
+) -> Generate:
     output_format = JSONOutputFormatParam(
         type="json_schema", schema=anthropic.transform_schema(Explanation)
     )
@@ -89,7 +164,7 @@ def claude_generator(client: anthropic.Anthropic, model: str) -> Generate:
         message = client.messages.create(
             model=model,
             max_tokens=MAX_OUTPUT_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": request}],
             output_config={"format": output_format},
         )
@@ -107,14 +182,9 @@ def claude_generator(client: anthropic.Anthropic, model: str) -> Generate:
     return generate
 
 
-def _request(domain: str, findings: Sequence[Finding], records: DnsRecords) -> str:
-    lines = [f"Domain: {domain}", "", "Records:"]
-    lines += _record_lines(f"SPF at {domain}", spf.select_records(records.apex_txt))
-    lines += _record_lines(f"DMARC at _dmarc.{domain}", records.dmarc_txt)
-    for target, txt in sorted(records.spf_by_domain.items()):
-        label = f"SPF at {target}, reached by include or redirect"
-        lines += _record_lines(label, spf.select_records(txt))
-    lines += ["", "Findings:"]
+def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecords) -> str:
+    """The request to pair with SYSTEM_PROMPT: the records and the findings."""
+    lines = [raw_records_request(domain, records), "", "Findings:"]
     lines += [
         f"{number}. {finding.code} ({finding.record} record, {finding.severity} severity), "
         f"evidence: {finding.evidence or 'none'}"
@@ -122,6 +192,17 @@ def _request(domain: str, findings: Sequence[Finding], records: DnsRecords) -> s
     ]
     if not findings:
         lines.append("none")
+    return "\n".join(lines)
+
+
+def raw_records_request(domain: str, records: DnsRecords) -> str:
+    """The request to pair with RAW_RECORDS_SYSTEM_PROMPT: the records alone."""
+    lines = [f"Domain: {domain}", "", "Records:"]
+    lines += _record_lines(f"SPF at {domain}", spf.select_records(records.apex_txt))
+    lines += _record_lines(f"DMARC at _dmarc.{domain}", records.dmarc_txt)
+    for target, txt in sorted(records.spf_by_domain.items()):
+        label = f"SPF at {target}, reached by include or redirect"
+        lines += _record_lines(label, spf.select_records(txt))
     return "\n".join(lines)
 
 

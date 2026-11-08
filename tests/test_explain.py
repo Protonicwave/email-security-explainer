@@ -8,6 +8,7 @@ import pytest
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import Verdict
 from email_security_explainer.explain import (
+    RAW_RECORDS_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     ExplanationError,
     claude_generator,
@@ -238,3 +239,19 @@ def test_generator_reports_a_truncated_answer() -> None:
 def test_generator_rejects_output_outside_the_schema(text: str) -> None:
     with pytest.raises(ExplanationError, match="does not fit the schema"):
         claude_generator(FakeApi(message(text)).client(), "claude-test")("the request")
+
+
+def test_raw_records_prompt_states_the_rule_for_every_finding_code() -> None:
+    described = {
+        line.split(":")[0].removeprefix("- ") for line in RAW_RECORDS_SYSTEM_PROMPT.splitlines()
+    }
+
+    assert set(FindingCode) <= described
+
+
+def test_generator_sends_the_system_prompt_it_is_given() -> None:
+    api = FakeApi(message(CLEAN.model_dump_json()))
+
+    claude_generator(api.client(), "claude-test", RAW_RECORDS_SYSTEM_PROMPT)("the request")
+
+    assert api.sent[0]["system"] == RAW_RECORDS_SYSTEM_PROMPT
