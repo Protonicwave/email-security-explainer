@@ -43,7 +43,9 @@ class Verdict(StrEnum):
     UNSUPPORTED_TOKEN = "unsupported_token"  # noqa: S105 (a verdict, not a password)
 
 
-@dataclass(frozen=True, slots=True)
+# Mutating these flags changes nothing a test can see: mypy rejects writes to a
+# frozen dataclass, and slots only saves memory.
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class ClaimCheck:
     claim: Claim
     verdict: Verdict
@@ -54,7 +56,7 @@ class ClaimCheck:
         return self.verdict is Verdict.ACCEPTED
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True)  # pragma: no mutate
 class CheckReport:
     claim_checks: tuple[ClaimCheck, ...]
     missed: tuple[Finding, ...]

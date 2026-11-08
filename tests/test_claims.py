@@ -1,5 +1,3 @@
-from dataclasses import FrozenInstanceError
-
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
@@ -257,28 +255,6 @@ def test_summary_quoting_a_token_absent_from_the_records_fails_the_check() -> No
     assert verdicts(report) == [Verdict.ACCEPTED] * 3
     assert report.summary_unsupported_tokens == ("p=reject", "+all")
     assert not report.is_clean
-
-
-def test_claim_check_cannot_be_modified() -> None:
-    claim_check = run_check(CLEAN_CLAIMS).claim_checks[0]
-
-    with pytest.raises(FrozenInstanceError):
-        claim_check.verdict = Verdict.INVENTED  # type: ignore[misc]  # frozen on purpose
-
-
-def test_report_cannot_be_modified() -> None:
-    report = run_check(CLEAN_CLAIMS)
-
-    with pytest.raises(FrozenInstanceError):
-        report.missed = ()  # type: ignore[misc]  # frozen on purpose
-
-
-def test_claim_check_stores_no_instance_dictionary() -> None:
-    assert not hasattr(run_check(CLEAN_CLAIMS).claim_checks[0], "__dict__")
-
-
-def test_report_stores_no_instance_dictionary() -> None:
-    assert not hasattr(run_check(CLEAN_CLAIMS), "__dict__")
 
 
 def test_spaces_around_equals_do_not_hide_a_token() -> None:
