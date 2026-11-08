@@ -75,6 +75,12 @@ def test_corpus_has_clean_cases_to_measure_invented_problems() -> None:
     assert sum(not audit(case) for case in cases) >= 3
 
 
+def test_corpus_has_records_captured_from_real_domains() -> None:
+    cases = load_cases(CORPUS.read_text(encoding="utf-8"))
+
+    assert sum(case.domain.startswith("real-") for case in cases) >= 8
+
+
 def test_load_cases_builds_records_and_normalises_the_domain() -> None:
     text = case_json(
         domain="Mixed.Example.",
