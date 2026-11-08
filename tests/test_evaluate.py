@@ -6,7 +6,7 @@ import httpx2
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
-from email_security_explainer.claims import check
+from email_security_explainer.claims import CheckReport, check
 from email_security_explainer.domain import DomainName
 from email_security_explainer.evaluate import (
     MAX_CASES,
@@ -169,12 +169,16 @@ class ScriptedModel:
         return answer
 
 
+def scored(outcome: CheckReport | Failure) -> Score | Failure:
+    return outcome if isinstance(outcome, Failure) else score(outcome)
+
+
 def run_once(
     from_findings: ScriptedModel, from_records: ScriptedModel, case: DnsRecords = RECORDS
 ) -> dict[Condition, Score | Failure]:
     runs = list(evaluate([case], from_findings, from_records, repeats=1))
     assert [(run.domain, run.repeat) for run in runs] == [(case.domain, 1)] * len(Condition)
-    return {run.condition: run.outcome for run in runs}
+    return {run.condition: scored(run.outcome) for run in runs}
 
 
 def test_each_condition_is_scored_on_the_explanation_a_reader_would_see() -> None:
@@ -249,7 +253,7 @@ def test_model_without_an_explanation_fails_its_condition_and_the_run_continues(
     )
 
     failure = Failure(FailureKind.NO_EXPLANATION, "declined")
-    assert [run.outcome for run in runs] == [
+    assert [scored(run.outcome) for run in runs] == [
         failure,
         Score(3, 0, 0, 0),
         Score(3, 0, 0, 0),
@@ -289,20 +293,28 @@ def test_repeats_run_every_case_again() -> None:
     ]
 
 
-def test_summarise_totals_each_condition() -> None:
-    def run(condition: Condition, outcome: Score | Failure) -> Run:
+def test_summarise_totals_each_condition_from_its_reports() -> None:
+    def run(condition: Condition, outcome: CheckReport | Failure) -> Run:
         return Run("a.example", 1, condition, outcome)
 
+    sloppy = Explanation(
+        summary="Your p=reject policy is undermined.",
+        claims=[
+            INVENTED,
+            WRONG_DETAIL,
+            claim(FindingCode.DMARC_NO_RUA, None, explanation="Unlike sp=reject."),
+        ],
+    )
     runs = [
-        run(Condition.RAW_RECORDS, Score(1, 2, 3, 4)),
-        run(Condition.RAW_RECORDS, Score(1, 1, 1, 1)),
+        run(Condition.RAW_RECORDS, check(FINDINGS, COMPLETE, RECORDS)),
+        run(Condition.RAW_RECORDS, check(FINDINGS, sloppy, RECORDS)),
         run(Condition.RAW_RECORDS, Failure(FailureKind.NO_EXPLANATION, "declined")),
         run(Condition.FINDINGS, Failure(FailureKind.API_UNAVAILABLE, "timeout")),
     ]
 
     assert summarise(runs) == [
         ConditionSummary(
-            Condition.RAW_RECORDS, scored=2, failed=1, errored=0, totals=Score(2, 3, 4, 5)
+            Condition.RAW_RECORDS, scored=2, failed=1, errored=0, totals=Score(3, 1, 3, 3)
         ),
         ConditionSummary(
             Condition.FINDINGS, scored=0, failed=0, errored=1, totals=Score(0, 0, 0, 0)

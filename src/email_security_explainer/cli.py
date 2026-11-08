@@ -13,15 +13,16 @@ from typing import Any
 import anthropic
 
 from email_security_explainer.audit import audit
+from email_security_explainer.claims import CheckReport, ClaimCheck
 from email_security_explainer.dns_fetch import DnsLookupError, TxtLookup, fetch_records, lookup_txt
 from email_security_explainer.domain import parse_domain
 from email_security_explainer.evaluate import (
     ConditionSummary,
     Failure,
     Run,
-    Score,
     evaluate,
     load_cases,
+    score,
     summarise,
 )
 from email_security_explainer.explain import (
@@ -226,12 +227,13 @@ def _render_summary(summaries: list[ConditionSummary]) -> str:
     return "\n".join(lines)
 
 
-def _outcome_text(outcome: Score | Failure) -> str:
+def _outcome_text(outcome: CheckReport | Failure) -> str:
     if isinstance(outcome, Failure):
         return f"{outcome.kind} ({outcome.message})"
+    counts = score(outcome)
     return (
-        f"explained {outcome.explained}, missed {outcome.missed}, "
-        f"invented {outcome.invented}, wrong detail {outcome.wrong_detail}"
+        f"explained {counts.explained}, missed {counts.missed}, "
+        f"invented {counts.invented}, wrong detail {counts.wrong_detail}"
     )
 
 
@@ -239,7 +241,7 @@ def _run_fields(model: str, run: Run) -> dict[str, Any]:
     if isinstance(run.outcome, Failure):
         outcome: dict[str, Any] = {"outcome": run.outcome.kind, "message": run.outcome.message}
     else:
-        outcome = {"outcome": "scored", **dataclasses.asdict(run.outcome)}
+        outcome = {"outcome": "scored", **_report_fields(run.outcome)}
     return {
         "model": model,
         "domain": run.domain,
@@ -247,3 +249,29 @@ def _run_fields(model: str, run: Run) -> dict[str, Any]:
         "condition": run.condition,
         **outcome,
     }
+
+
+def _report_fields(report: CheckReport) -> dict[str, Any]:
+    return {
+        **dataclasses.asdict(score(report)),
+        "claims": [_claim_fields(claim_check) for claim_check in report.claim_checks],
+        "missed_findings": [
+            {"code": finding.code, "evidence": finding.evidence} for finding in report.missed
+        ],
+        "summary_unsupported_tokens": list(report.summary_unsupported_tokens),
+    }
+
+
+def _claim_fields(claim_check: ClaimCheck) -> dict[str, Any]:
+    claim = claim_check.claim
+    fields: dict[str, Any] = {
+        "finding_code": claim.finding_code,
+        "quoted_value": claim.quoted_value,
+        "verdict": claim_check.verdict,
+        "unsupported_tokens": list(claim_check.unsupported_tokens),
+    }
+    # An accepted claim's prose explains no failure, and leaving it out keeps
+    # the run file small.
+    if not claim_check.is_accepted:
+        fields["explanation"] = claim.explanation
+    return fields

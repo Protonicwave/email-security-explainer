@@ -271,7 +271,54 @@ def test_eval_writes_every_run_as_a_json_line(tmp_path: Path) -> None:
         "invented": 0,
         "missed": 1,
         "wrong_detail": 0,
+        "claims": [
+            {
+                "finding_code": "SPF_SOFTFAIL",
+                "quoted_value": "~all",
+                "verdict": "accepted",
+                "unsupported_tokens": [],
+            }
+        ],
+        "missed_findings": [{"code": "DMARC_POLICY_NONE", "evidence": "p=none"}],
+        "summary_unsupported_tokens": [],
     }
+
+
+def test_eval_records_why_each_claim_failed_and_quotes_its_prose(tmp_path: Path) -> None:
+    invented = Claim(
+        finding_code=FindingCode.SPF_ALL_PASS,
+        quoted_value="+all",
+        explanation="Anyone may send.",
+        fix="Remove +all.",
+    )
+    unsupported = softfail_claim().model_copy(update={"explanation": "Weaker than -all."})
+    answer = Explanation(summary="Your p=reject policy is ignored.", claims=[invented, unsupported])
+    output = tmp_path / "results.jsonl"
+
+    assert eval_with_model(tmp_path, lambda request: answer, output) == EXIT_OK
+
+    run = written_runs(output)[0]
+    assert run["claims"] == [
+        {
+            "finding_code": "SPF_ALL_PASS",
+            "quoted_value": "+all",
+            "verdict": "invented",
+            "unsupported_tokens": [],
+            "explanation": "Anyone may send.",
+        },
+        {
+            "finding_code": "SPF_SOFTFAIL",
+            "quoted_value": "~all",
+            "verdict": "unsupported_token",
+            "unsupported_tokens": ["-all"],
+            "explanation": "Weaker than -all.",
+        },
+    ]
+    assert run["missed_findings"] == [
+        {"code": "SPF_SOFTFAIL", "evidence": "~all"},
+        {"code": "DMARC_POLICY_NONE", "evidence": "p=none"},
+    ]
+    assert run["summary_unsupported_tokens"] == ["p=reject"]
 
 
 def eval_with_model(tmp_path: Path, model: Generate, output: Path) -> int:

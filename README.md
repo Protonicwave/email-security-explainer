@@ -63,7 +63,10 @@ uv run esx eval --repeats 3 --output eval-results.jsonl
 
 It prints a table of explained, missed, invented and wrong-detail counts per
 condition, and writes each run to the `--output` file as one JSON line as soon
-as it finishes, so a run that stops part-way keeps what it has paid for. A run
+as it finishes, so a run that stops part-way keeps what it has paid for. Each
+line gives the counts, every claim's verdict with the record tokens it was
+rejected for and the prose of any claim that failed, the findings left
+unexplained, and any unsupported tokens in the summary. A run
 where the model declines or breaks the schema counts as failed; a connection,
 rate-limit or server error after the SDK's retries counts as errored. Either way
 the evaluation moves on to the next run. Other API errors, such as a bad key,

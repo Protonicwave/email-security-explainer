@@ -80,10 +80,13 @@ class Failure:
 
 @dataclass(frozen=True, slots=True)
 class Run:
+    """One condition on one case. A scored run keeps the claim check of the
+    explanation a reader would see, so each verdict can be traced."""
+
     domain: str
     repeat: int
     condition: Condition
-    outcome: Score | Failure
+    outcome: CheckReport | Failure
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,12 +169,12 @@ def summarise(runs: Sequence[Run]) -> list[ConditionSummary]:
 
 def _run_case(
     records: DnsRecords, from_findings: Generate, from_records: Generate
-) -> Iterator[tuple[Condition, Score | Failure]]:
+) -> Iterator[tuple[Condition, CheckReport | Failure]]:
     findings = audit(records)
     raw_request = raw_records_request(records)
     yield (
         Condition.RAW_RECORDS,
-        _attempt(lambda: score(check(findings, from_records(raw_request), records))),
+        _attempt(lambda: check(findings, from_records(raw_request), records)),
     )
     request = findings_request(findings, records)
     first = _attempt(lambda: from_findings(request))
@@ -179,13 +182,13 @@ def _run_case(
         yield Condition.FINDINGS, first
         yield Condition.FINDINGS_CHECKED, first
         return
-    yield Condition.FINDINGS, score(check(findings, first, records))
+    yield Condition.FINDINGS, check(findings, first, records)
 
-    def checked_score() -> Score:
+    def checked_report() -> CheckReport:
         result = check_and_repair(request, first, findings, records, from_findings)
-        return score(check(findings, result.explanation, records))
+        return check(findings, result.explanation, records)
 
-    yield Condition.FINDINGS_CHECKED, _attempt(checked_score)
+    yield Condition.FINDINGS_CHECKED, _attempt(checked_report)
 
 
 def _attempt[T](action: Callable[[], T]) -> T | Failure:
@@ -199,7 +202,7 @@ def _attempt[T](action: Callable[[], T]) -> T | Failure:
 
 def _summarise_condition(condition: Condition, runs: Sequence[Run]) -> ConditionSummary:
     outcomes = [run.outcome for run in runs if run.condition is condition]
-    scores = [outcome for outcome in outcomes if isinstance(outcome, Score)]
+    scores = [score(outcome) for outcome in outcomes if isinstance(outcome, CheckReport)]
     failure_kinds = Counter(outcome.kind for outcome in outcomes if isinstance(outcome, Failure))
     return ConditionSummary(
         condition,
