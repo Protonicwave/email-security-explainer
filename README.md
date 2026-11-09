@@ -143,8 +143,10 @@ DMARC (RFC 7489): a missing or duplicated record, syntax errors, `p=none`,
 aggregate reports.
 
 Not checked: DKIM (finding a key needs a selector name that DNS does not
-reveal), MTA-STS, BIMI, the SPF void-lookup limit, and the organisational
-domain fallback for subdomains without their own DMARC record.
+reveal), MTA-STS, BIMI, the SPF void-lookup limit, the `all` of a `redirect`
+whose target is written with a macro (it depends on the message being
+checked), and the organisational domain fallback for subdomains without their
+own DMARC record.
 
 ## Development
 

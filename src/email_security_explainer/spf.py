@@ -292,8 +292,10 @@ def _deciding_record(
     parsed: ParsedRecord, spf_by_domain: Mapping[str, tuple[str, ...]]
 ) -> ParsedRecord | None:
     """The record whose `all` decides the result: `parsed`, or the end of its
-    redirect chain. None when the chain breaks or passes the lookup limit, which
-    SPF_TARGET_UNUSABLE and SPF_LOOKUP_LIMIT already report.
+    redirect chain. None when the chain cannot be followed: a target that is
+    missing, unusable or past the lookup limit, which SPF_TARGET_UNUSABLE and
+    SPF_LOOKUP_LIMIT report, or a target written with a macro, which depends on
+    the message and so cannot be judged in advance.
 
     RFC 7208 section 6.1: without an all mechanism, the redirect target's
     result is the record's result.
