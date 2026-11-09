@@ -1,4 +1,5 @@
-"""Command-line entry point: `esx audit`, `esx explain`, `esx eval` and `esx case`."""
+"""Command-line entry point: `esx audit`, `esx explain`, `esx eval`, `esx case` and
+`esx serve`."""
 
 import argparse
 import dataclasses
@@ -39,6 +40,7 @@ from email_security_explainer.explain import (
     explain,
 )
 from email_security_explainer.findings import Finding
+from email_security_explainer.server import serve
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -46,6 +48,8 @@ TEXT_WIDTH_CHARACTERS = 80
 MAX_REPEATS = 10
 DEFAULT_CASES_PATH = "cases/cases.json"
 DEFAULT_RESULTS_PATH = "eval-results.jsonl"
+DEFAULT_PORT = 8000
+MAX_PORT = 65535
 
 GeneratorFactory = Callable[[str, str], Generate]
 """Builds a Generate from a model name and a system prompt."""
@@ -72,6 +76,9 @@ def main(
             output = _evaluate(args, generator_for)
         elif args.command == "case":
             output = dump_case(fetch_records(parse_domain(args.domain), lookup))
+        elif args.command == "serve":
+            serve(args.port, lookup)
+            return EXIT_OK
         else:
             output = _audit_or_explain(args, lookup, generator_for)
     except (
@@ -120,6 +127,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "case", help="print a domain's records as a case for the evaluation corpus"
     )
     case_command.add_argument("domain", help="domain to capture, such as example.com")
+    serve_command = commands.add_parser(
+        "serve", help="check domains in a web page served to this machine only"
+    )
+    serve_command.add_argument(
+        "--port",
+        type=_port_number,
+        default=DEFAULT_PORT,
+        help=f"port on 127.0.0.1 to serve the page from (default: {DEFAULT_PORT})",
+    )
     return parser
 
 
@@ -135,6 +151,12 @@ def _repeat_count(text: str) -> int:
         raise argparse.ArgumentTypeError(
             f"expected a whole number from 1 to {MAX_REPEATS}, got {text!r}"
         )
+    return int(text)
+
+
+def _port_number(text: str) -> int:
+    if not (text.isascii() and text.isdigit() and 1 <= int(text) <= MAX_PORT):
+        raise argparse.ArgumentTypeError(f"expected a port from 1 to {MAX_PORT}, got {text!r}")
     return int(text)
 
 

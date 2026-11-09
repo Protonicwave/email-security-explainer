@@ -1,7 +1,7 @@
 import io
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import anthropic
@@ -463,3 +463,56 @@ def test_errors_the_console_code_page_cannot_hold_are_written_as_utf8(
 
     sys.stderr.flush()
     assert "例" in buffer.getvalue().decode("utf-8")
+
+
+ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None]]
+
+
+def fake_serve(monkeypatch: pytest.MonkeyPatch, error: OSError | None = None) -> list[ServeCall]:
+    calls: list[ServeCall] = []
+
+    def serve(port: int, lookup: Callable[[str], tuple[str, ...] | None]) -> None:
+        calls.append((port, lookup))
+        if error is not None:
+            raise error
+
+    monkeypatch.setattr("email_security_explainer.cli.serve", serve)
+    return calls
+
+
+def test_serve_passes_the_port_and_dns_lookup_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = fake_serve(monkeypatch)
+
+    def lookup(name: str) -> tuple[str, ...] | None:
+        return ()
+
+    assert main(["serve", "--port", "8123"], lookup) == EXIT_OK
+    assert calls == [(8123, lookup)]
+
+
+def test_serve_defaults_to_port_8000(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = fake_serve(monkeypatch)
+    assert main(["serve"]) == EXIT_OK
+    assert [port for port, _lookup in calls] == [8000]
+
+
+# The last is 80 in full-width digits, which int() would accept.
+@pytest.mark.parametrize(
+    "port", ["0", "65536", "http", "\N{FULLWIDTH DIGIT EIGHT}\N{FULLWIDTH DIGIT ZERO}"]
+)
+def test_serve_rejects_a_port_out_of_range(
+    port: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = fake_serve(monkeypatch)
+    with pytest.raises(SystemExit):
+        main(["serve", "--port", port])
+    assert calls == []
+    assert "expected a port from 1 to 65535" in capsys.readouterr().err
+
+
+def test_serve_reports_a_port_already_in_use(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_serve(monkeypatch, OSError("address already in use"))
+    assert main(["serve"]) == EXIT_FAILURE
+    assert capsys.readouterr().err == "esx: address already in use\n"
