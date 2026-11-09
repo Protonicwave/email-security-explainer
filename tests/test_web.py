@@ -10,13 +10,18 @@ import pytest
 from email_security_explainer.audit import DnsRecords
 from email_security_explainer.domain import DomainName
 from email_security_explainer.evaluate import load_cases
+from email_security_explainer.explain import explain
 from email_security_explainer.findings import Finding, FindingCode
+from email_security_explainer.schema import Claim, Explanation
 from email_security_explainer.web import (
     FINDING_TITLES,
+    ExplainView,
     Span,
     audit_view,
+    explain_view,
     headline,
     marked_records,
+    ordered_findings,
 )
 
 DOMAIN = DomainName("example.com")
@@ -334,3 +339,137 @@ def test_audit_view_serialises_to_json() -> None:
     payload = json.loads(json.dumps(asdict(audit_view(records(("v=spf1 ptr -all",))))))
     assert payload["findings"][0]["code"] == "SPF_PTR"
     assert payload["records"]["spf"][0][2] == {"kind": "mark", "text": "ptr", "finding": 1}
+
+
+EXPLAINED = records(("v=spf1 ptr ~all",), ("v=DMARC1; p=none",))
+MODEL = "claude-test"
+
+
+def claim(code: FindingCode, quoted_value: str | None, explanation: str = "Plain.") -> Claim:
+    return Claim(
+        finding_code=code, quoted_value=quoted_value, explanation=explanation, fix=f"Fix {code}."
+    )
+
+
+PASSING = (
+    claim(FindingCode.SPF_PTR, "ptr"),
+    claim(FindingCode.DMARC_NO_RUA, None),
+    claim(FindingCode.DMARC_POLICY_NONE, "p=none"),
+    claim(FindingCode.SPF_SOFTFAIL, "~all"),
+)
+
+
+def explained(case: DnsRecords, *answers: Explanation) -> ExplainView:
+    """Explain `case` with a model that gives `answers` in turn."""
+    remaining = list(answers)
+    findings = ordered_findings(case)
+    result = explain(findings, case, lambda _request: remaining.pop(0))
+    return explain_view(case.domain, MODEL, findings, result)
+
+
+def outcomes(view: ExplainView) -> list[tuple[int, FindingCode, str | None]]:
+    return [(entry.number, entry.code, entry.explanation) for entry in view.findings]
+
+
+def test_ordered_findings_match_the_audit_view_numbering() -> None:
+    assert [finding.code for finding in ordered_findings(EXPLAINED)] == [
+        finding.code for finding in audit_view(EXPLAINED).findings
+    ]
+
+
+def test_explain_view_attaches_each_accepted_claim_to_its_numbered_finding() -> None:
+    answer = Explanation(
+        summary="Forged mail reaches inboxes.",
+        claims=[claim(c.finding_code, c.quoted_value, f"About {c.finding_code}.") for c in PASSING],
+    )
+
+    view = explained(EXPLAINED, answer)
+
+    assert outcomes(view) == [
+        (1, FindingCode.DMARC_POLICY_NONE, "About DMARC_POLICY_NONE."),
+        (2, FindingCode.SPF_SOFTFAIL, "About SPF_SOFTFAIL."),
+        (3, FindingCode.SPF_PTR, "About SPF_PTR."),
+        (4, FindingCode.DMARC_NO_RUA, "About DMARC_NO_RUA."),
+    ]
+    assert view.findings[0].fix == "Fix DMARC_POLICY_NONE."
+    assert view.findings[0].evidence == "p=none"
+    assert view.summary == "Forged mail reaches inboxes."
+    assert (view.domain, view.model, view.extra_claims_removed) == ("example.com", MODEL, 0)
+
+
+def test_explain_view_lists_the_tokens_of_an_explanation_that_failed_twice() -> None:
+    wrong = claim(FindingCode.SPF_PTR, "ptr", "It names 203.0.113.40 and ip4:198.51.100.0/24.")
+    answer = Explanation(summary="Open.", claims=[wrong, *PASSING[1:]])
+
+    view = explained(EXPLAINED, answer, answer)
+
+    removed = view.findings[2]
+    assert (removed.code, removed.explanation, removed.fix) == (FindingCode.SPF_PTR, None, None)
+    assert removed.unsupported_tokens == ("203.0.113.40", "ip4:198.51.100.0/24")
+    assert [entry.explanation is None for entry in view.findings] == [False, False, True, False]
+    assert view.extra_claims_removed == 0
+
+
+def test_explain_view_marks_a_finding_no_claim_named_as_removed_without_tokens() -> None:
+    answer = Explanation(summary="Open.", claims=list(PASSING[1:]))
+
+    view = explained(EXPLAINED, answer, answer)
+
+    assert (view.findings[2].explanation, view.findings[2].unsupported_tokens) == (None, ())
+
+
+def test_explain_view_counts_claims_that_explain_no_finding_on_the_page() -> None:
+    answer = Explanation(
+        summary="Open.",
+        claims=[
+            *PASSING,
+            claim(FindingCode.SPF_PTR, "ptr"),
+            claim(FindingCode.SPF_ALL_PASS, "+all"),
+            claim(FindingCode.SPF_SOFTFAIL, "-all"),
+        ],
+    )
+
+    view = explained(EXPLAINED, answer, answer)
+
+    assert view.extra_claims_removed == 3
+    assert all(entry.explanation is not None for entry in view.findings)
+
+
+def test_explain_view_gives_each_of_two_identical_findings_its_own_claim() -> None:
+    case = records(("v=spf1 ptr ptr -all",))
+    answer = Explanation(
+        summary="Mostly fine.",
+        claims=[
+            claim(FindingCode.SPF_PTR, "ptr", "First."),
+            claim(FindingCode.SPF_PTR, "ptr", "Second names 192.0.2.9."),
+        ],
+    )
+
+    view = explained(case, answer, answer)
+
+    assert [(entry.explanation, entry.unsupported_tokens) for entry in view.findings] == [
+        ("First.", ()),
+        (None, ("192.0.2.9",)),
+    ]
+
+
+def test_explain_view_drops_a_summary_that_quotes_values_not_in_the_records() -> None:
+    answer = Explanation(summary="Change ~all to -all.", claims=list(PASSING))
+
+    view = explained(EXPLAINED, answer, answer)
+
+    assert view.summary is None
+    assert view.summary_unsupported_tokens == ("-all",)
+
+
+def test_explain_view_serialises_to_json() -> None:
+    view = explained(EXPLAINED, Explanation(summary="Open.", claims=list(PASSING)))
+    payload = json.loads(json.dumps(asdict(view)))
+    assert payload["findings"][0] == {
+        "number": 1,
+        "code": "DMARC_POLICY_NONE",
+        "evidence": "p=none",
+        "explanation": "Plain.",
+        "fix": "Fix DMARC_POLICY_NONE.",
+        "unsupported_tokens": [],
+    }

@@ -1,5 +1,6 @@
 """Describe an audit for the web page: a headline, the records with each finding
-marked on its token, and the findings in severity order. No I/O."""
+marked on its token, the findings in severity order, and Claude's checked
+explanation of each. No I/O."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Literal
 from email_security_explainer import dmarc, spf
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.domain import DomainName
+from email_security_explainer.explain import ExplainResult
 from email_security_explainer.findings import Finding, FindingCode, RecordKind, Severity
 
 FINDING_TITLES: dict[FindingCode, str] = {
@@ -136,8 +138,45 @@ class AuditView:
     max_spf_lookups: int
 
 
+@dataclass(frozen=True, slots=True)
+class FindingExplanation:
+    """Claude's explanation and fix for finding `number`, both None when the
+    explanation failed the claim check and was removed. `unsupported_tokens`
+    are the values a removed explanation quoted that the records lack."""
+
+    number: int
+    code: FindingCode
+    evidence: str | None
+    explanation: str | None
+    fix: str | None
+    unsupported_tokens: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        assert (self.explanation is None) == (self.fix is None), self
+        assert self.explanation is None or not self.unsupported_tokens, self
+
+
+@dataclass(frozen=True, slots=True)
+class ExplainView:
+    """`summary` is None when it quoted record values the records lack.
+    `extra_claims_removed` counts claims that explain no finding on the page:
+    invented, duplicated or quoting the wrong value."""
+
+    domain: str
+    model: str
+    summary: str | None
+    summary_unsupported_tokens: tuple[str, ...]
+    findings: tuple[FindingExplanation, ...]
+    extra_claims_removed: int
+
+
+def ordered_findings(records: DnsRecords) -> list[Finding]:
+    """The audit's findings, most severe first, in the order the page numbers them."""
+    return sorted(audit(records), key=lambda finding: _SEVERITY_RANK[finding.severity])
+
+
 def audit_view(records: DnsRecords) -> AuditView:
-    findings = sorted(audit(records), key=lambda finding: _SEVERITY_RANK[finding.severity])
+    findings = ordered_findings(records)
     is_dmarc_enforcing = dmarc.assess(records.dmarc_txt).is_enforcing
     return AuditView(
         domain=records.domain,
@@ -157,6 +196,62 @@ def audit_view(records: DnsRecords) -> AuditView:
         spf_lookup_count=spf.walk_lookups(records.apex_txt, records.spf_by_domain).lookup_count,
         max_spf_lookups=spf.MAX_SPF_LOOKUPS,
     )
+
+
+def explain_view(
+    domain: str, model: str, findings: Sequence[Finding], result: ExplainResult
+) -> ExplainView:
+    """Attach each claim in `result` to the finding it explains, numbered as
+    `findings`. Each accepted claim takes the first unexplained finding with
+    its code and evidence, as the claim check does; a rejected claim that
+    names a finding left unexplained gives that finding its unsupported tokens."""
+    report = result.last_answer_check
+    open_numbers = list(range(1, len(findings) + 1))
+    entries: dict[int, FindingExplanation] = {}
+    rejected = []
+    for claim_check in report.claim_checks:
+        if not claim_check.is_accepted:
+            rejected.append(claim_check)
+            continue
+        claim = claim_check.claim
+        number = _first_open(
+            open_numbers, findings, Finding(claim.finding_code, claim.quoted_value)
+        )
+        assert number is not None, f"accepted claim matches no unexplained finding: {claim}"
+        entries[number] = FindingExplanation(
+            number, claim.finding_code, claim.quoted_value, claim.explanation, claim.fix
+        )
+    extra_claims_removed = 0
+    for claim_check in rejected:
+        claimed = Finding(claim_check.claim.finding_code, claim_check.claim.quoted_value)
+        number = _first_open(open_numbers, findings, claimed)
+        if number is None:
+            extra_claims_removed += 1
+            continue
+        entries[number] = FindingExplanation(
+            number, claimed.code, claimed.evidence, None, None, claim_check.unsupported_tokens
+        )
+    for number in open_numbers:
+        finding = findings[number - 1]
+        entries[number] = FindingExplanation(number, finding.code, finding.evidence, None, None)
+    return ExplainView(
+        domain=domain,
+        model=model,
+        summary=None if report.summary_unsupported_tokens else result.explanation.summary,
+        summary_unsupported_tokens=report.summary_unsupported_tokens,
+        findings=tuple(entries[number] for number in sorted(entries)),
+        extra_claims_removed=extra_claims_removed,
+    )
+
+
+def _first_open(
+    open_numbers: list[int], findings: Sequence[Finding], claimed: Finding
+) -> int | None:
+    """Take and return the first number in `open_numbers` whose finding is `claimed`."""
+    number = next((n for n in open_numbers if findings[n - 1] == claimed), None)
+    if number is not None:
+        open_numbers.remove(number)
+    return number
 
 
 def headline(
