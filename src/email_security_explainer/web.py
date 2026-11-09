@@ -208,26 +208,30 @@ def explain_view(
     report = result.last_answer_check
     open_numbers = list(range(1, len(findings) + 1))
     entries: dict[int, FindingExplanation] = {}
-    rejected = []
+    # The claim check lets accepted claims, in order, take findings and
+    # rejected claims take none, so the accepted claims are matched first.
     for claim_check in report.claim_checks:
         if not claim_check.is_accepted:
-            rejected.append(claim_check)
             continue
         claim = claim_check.claim
         number = _first_open(
             open_numbers, findings, Finding(claim.finding_code, claim.quoted_value)
         )
         assert number is not None, f"accepted claim matches no unexplained finding: {claim}"
+        open_numbers.remove(number)
         entries[number] = FindingExplanation(
             number, claim.finding_code, claim.quoted_value, claim.explanation, claim.fix
         )
     extra_claims_removed = 0
-    for claim_check in rejected:
+    for claim_check in report.claim_checks:
+        if claim_check.is_accepted:
+            continue
         claimed = Finding(claim_check.claim.finding_code, claim_check.claim.quoted_value)
         number = _first_open(open_numbers, findings, claimed)
         if number is None:
             extra_claims_removed += 1
             continue
+        open_numbers.remove(number)
         entries[number] = FindingExplanation(
             number, claimed.code, claimed.evidence, None, None, claim_check.unsupported_tokens
         )
@@ -245,13 +249,10 @@ def explain_view(
 
 
 def _first_open(
-    open_numbers: list[int], findings: Sequence[Finding], claimed: Finding
+    open_numbers: Sequence[int], findings: Sequence[Finding], claimed: Finding
 ) -> int | None:
-    """Take and return the first number in `open_numbers` whose finding is `claimed`."""
-    number = next((n for n in open_numbers if findings[n - 1] == claimed), None)
-    if number is not None:
-        open_numbers.remove(number)
-    return number
+    """The first number in `open_numbers` whose finding is `claimed`."""
+    return next((n for n in open_numbers if findings[n - 1] == claimed), None)
 
 
 def headline(
@@ -264,7 +265,9 @@ def headline(
     for finding in findings:
         evidence_by_code.setdefault(finding.code, finding.evidence)
     is_partial = FindingCode.DMARC_PARTIAL_PCT in evidence_by_code
-    if FindingCode.SPF_ALL_PASS in evidence_by_code or not (is_dmarc_enforcing or is_partial):
+    # A partial pct leaves DMARC short of enforcing, but has a headline of its own.
+    is_dmarc_open = not is_dmarc_enforcing and not is_partial
+    if FindingCode.SPF_ALL_PASS in evidence_by_code or is_dmarc_open:
         cause = next((text for code, text in _OPEN_CAUSES if code in evidence_by_code), None)
         assert cause is not None, f"DMARC does not enforce, yet no finding says why: {findings}"
         return Headline(f"Anyone can send email as {domain}.", cause)
@@ -314,13 +317,13 @@ def marked_records(records: DnsRecords, findings: Sequence[Finding]) -> MarkedRe
             continue
         searched = list(own_lines)
         if finding.code is FindingCode.SPF_TARGET_UNUSABLE:
-            searched += [spans for _domain, _via, spans in chain]
+            searched += [line.spans for line in chain]
         elif finding.code in _ALL_CODES:
-            searched += [spans for domain, _via, spans in chain if domain in deciding_domains]
+            searched += [line.spans for line in chain if line.domain in deciding_domains]
         _mark_first_free_token(searched, finding.evidence, number)
     return MarkedRecords(
         spf=tuple(tuple(line) for line in spf_lines),
-        spf_chain=tuple(ChainRow(via, tuple(spans)) for _domain, via, spans in chain),
+        spf_chain=tuple(ChainRow(line.via, tuple(line.spans)) for line in chain),
         dmarc=tuple(tuple(line) for line in dmarc_lines),
     )
 
@@ -351,10 +354,19 @@ def _dmarc_spans(record: str) -> list[Span]:
     return spans
 
 
-def _chain(records: DnsRecords) -> list[tuple[str, str, list[Span]]]:
+@dataclass(frozen=True, slots=True)
+class _ChainLine:
+    """One record line of an include or redirect target, while it is marked."""
+
+    domain: str
+    via: str
+    spans: list[Span]
+
+
+def _chain(records: DnsRecords) -> list[_ChainLine]:
     """The fetched include and redirect targets in the order a reader meets
-    them, each once, as (domain, term that reached it, spans)."""
-    rows: list[tuple[str, str, list[Span]]] = []
+    them, each once."""
+    rows: list[_ChainLine] = []
     seen: set[str] = set()
     pending = list(reversed(spf.followed_terms(records.apex_txt)))
     # Each fetched target is expanded once, so the loop ends after at most
@@ -367,7 +379,10 @@ def _chain(records: DnsRecords) -> list[tuple[str, str, list[Span]]]:
         seen.add(target)
         txt = records.spf_by_domain[target]
         lines = [_spf_spans(record) for record in spf.select_records(txt)]
-        rows += [(target, term.text, line) for line in lines or [[Span("absent", "No SPF record")]]]
+        rows += [
+            _ChainLine(target, term.text, line)
+            for line in lines or [[Span("absent", "No SPF record")]]
+        ]
         pending += reversed(spf.followed_terms(txt))
     return rows
 
