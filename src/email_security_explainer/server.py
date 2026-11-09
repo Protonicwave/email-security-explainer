@@ -149,6 +149,10 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
                 self._audit(raw_domain)
             else:
                 self._explain(raw_domain)
+        except ConnectionError:
+            # The page closed the connection before the answer, as it does when
+            # the tab closes; nobody is left to answer.
+            logger.info("%s for %r: the page left before the answer", self.path, raw_domain)
         except Exception:
             # The process boundary for one request: the page gets an answer and
             # the terminal gets the traceback.

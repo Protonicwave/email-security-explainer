@@ -1,6 +1,9 @@
 import errno
 import http.client
 import json
+import logging
+import socket
+import struct
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -292,4 +295,30 @@ def test_refuses_a_second_explanation_while_one_runs_with_429(
 
 def test_explain_reports_an_unexpected_failure_with_500_and_frees_the_lock(port: int) -> None:
     assert explain(port, "broken.example")[0] == 500
+    assert explain(port, "example.com")[0] == 200
+
+
+def test_a_page_that_leaves_mid_explanation_is_not_reported_as_a_failure(
+    port: int,
+    claude: FakeClaude,
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    body = json.dumps({"domain": "example.com"}).encode()
+    claude.release.clear()
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as page:
+        page.sendall(
+            b"POST /api/explain HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Length: %d\r\n\r\n%s"
+            % (port, len(body), body)
+        )
+        assert claude.entered.wait(timeout=5)
+        # A zero linger time closes with a reset, as a browser abandoning the request can.
+        page.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+    claude.release.set()
+    # The handler frees the lock before it answers, so wait for it to finish.
+    for thread in threading.enumerate():
+        if "process_request_thread" in thread.name:
+            thread.join(timeout=5)
+    assert [record for record in caplog.records if record.levelno >= logging.ERROR] == []
+    assert "Traceback" not in capsys.readouterr().err
     assert explain(port, "example.com")[0] == 200
