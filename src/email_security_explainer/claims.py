@@ -10,7 +10,7 @@ names values the records do not yet contain.
 
 import ipaddress
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -50,6 +50,7 @@ _SPACE_AROUND_EQUALS = re.compile(r"\s*=\s*")
 # quote any one of them.
 _URI_LIST = re.compile(r"(?<![\w-])(rua|ruf)\s*=\s*([^;]+)", re.IGNORECASE)
 _TRAILING_PUNCTUATION = ".:!?"
+_BARE_NAME = re.compile(r"[\w.-]+")
 
 
 class Verdict(StrEnum):
@@ -91,18 +92,18 @@ class CheckReport:
 def check(
     findings: Sequence[Finding], explanation: Explanation, records: DnsRecords
 ) -> CheckReport:
-    supported_tokens = _supported_tokens(records)
+    is_supported = _supported_token_test(records)
     uncovered = list(findings)
     claim_checks: list[ClaimCheck] = []
     for claim in explanation.claims:
-        claim_check = _check_claim(claim, findings, uncovered, supported_tokens)
+        claim_check = _check_claim(claim, findings, uncovered, is_supported)
         if claim_check.is_accepted:
             uncovered.remove(Finding(claim.finding_code, claim.quoted_value))
         claim_checks.append(claim_check)
     return CheckReport(
         tuple(claim_checks),
         tuple(uncovered),
-        _unsupported_tokens(explanation.summary, supported_tokens),
+        _unsupported_tokens(explanation.summary, is_supported),
     )
 
 
@@ -110,7 +111,7 @@ def _check_claim(
     claim: Claim,
     findings: Sequence[Finding],
     uncovered: list[Finding],
-    supported_tokens: frozenset[str],
+    is_supported: Callable[[str], bool],
 ) -> ClaimCheck:
     claimed = Finding(claim.finding_code, claim.quoted_value)
     if claim.finding_code not in {finding.code for finding in findings}:
@@ -119,13 +120,34 @@ def _check_claim(
         return ClaimCheck(claim, Verdict.WRONG_DETAIL)
     if claimed not in uncovered:
         return ClaimCheck(claim, Verdict.DUPLICATE)
-    unsupported = _unsupported_tokens(claim.explanation, supported_tokens)
+    unsupported = _unsupported_tokens(claim.explanation, is_supported)
     if unsupported:
         return ClaimCheck(claim, Verdict.UNSUPPORTED_TOKEN, unsupported)
     return ClaimCheck(claim, Verdict.ACCEPTED)
 
 
-def _supported_tokens(records: DnsRecords) -> frozenset[str]:
+def _supported_token_test(records: DnsRecords) -> Callable[[str], bool]:
+    tokens = _record_tokens(records)
+    subdomain_suffix = f".{records.domain}"
+
+    def is_supported(token: str) -> bool:
+        return token in tokens or _is_illustrative_subdomain(token, subdomain_suffix)
+
+    return is_supported
+
+
+def _is_illustrative_subdomain(token: str, subdomain_suffix: str) -> bool:
+    # A made-up host such as billing.<domain> quotes nothing from the records,
+    # but a service name such as _spf.<domain> reads as a record the domain
+    # publishes, and a record token such as include:billing.<domain> as a term.
+    return (
+        token.endswith(subdomain_suffix)
+        and _BARE_NAME.fullmatch(token) is not None
+        and not any(label.startswith("_") for label in token.split("."))
+    )
+
+
+def _record_tokens(records: DnsRecords) -> frozenset[str]:
     texts = [
         *spf.select_records(records.apex_txt),
         *records.dmarc_txt,
@@ -143,8 +165,8 @@ def _split_uri_lists(record: str) -> str:
     )
 
 
-def _unsupported_tokens(prose: str, supported_tokens: frozenset[str]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(token for token in _tokens(prose) if token not in supported_tokens))
+def _unsupported_tokens(prose: str, is_supported: Callable[[str], bool]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(token for token in _tokens(prose) if not is_supported(token)))
 
 
 def _tokens(text: str) -> Iterator[str]:

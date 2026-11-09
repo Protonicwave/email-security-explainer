@@ -340,7 +340,7 @@ def test_bare_address_in_the_records_is_supported_in_any_form(address: str) -> N
     ("summary", "token"),
     [
         ("Mail passes through evil.example.", "evil.example"),
-        ("Mail passes through Mail.Example.com today.", "mail.example.com"),
+        ("Mail passes through Mail.Evil.example today.", "mail.evil.example"),
         ("Reports go to dmarc@evil.example.", "evil.example"),
         ("Reports go to first.last@evil.example.", "evil.example"),
         ("See https://evil.example/dmarc for details.", "evil.example"),
@@ -363,6 +363,34 @@ def test_bare_domain_absent_from_the_records_is_unsupported(summary: str, token:
 )
 def test_audited_domain_and_domains_in_the_records_are_supported(domain: str) -> None:
     assert summary_tokens(f"Mail for {domain} is covered.") == ()
+
+
+@pytest.mark.parametrize("domain", ["billing.example.com", "Accounts.Billing.Example.com."])
+def test_illustrative_subdomain_of_the_audited_domain_is_supported(domain: str) -> None:
+    assert summary_tokens(f"Mail from a made-up name such as {domain} passes.") == ()
+
+
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("Your record includes _spf.example.com.", "_spf.example.com"),
+        ("The key is at s1._domainkey.example.com.", "s1._domainkey.example.com"),
+        ("Mail passes through notexample.com today.", "notexample.com"),
+        (
+            "Mail passes through billing.example.com.evil.example.",
+            "billing.example.com.evil.example",
+        ),
+        ("Your record has include:billing.example.com in it.", "include:billing.example.com"),
+        (
+            "Reports go to rua=mailto:d@billing.example.com today.",
+            "rua=mailto:d@billing.example.com",
+        ),
+    ],
+)
+def test_service_names_lookalikes_and_record_tokens_under_the_domain_are_unsupported(
+    summary: str, token: str
+) -> None:
+    assert summary_tokens(summary) == (token,)
 
 
 @pytest.mark.parametrize(
