@@ -95,9 +95,11 @@ uv run esx serve --port 8080 --model claude-opus-5-5 --open
 
 `--open` opens the page in the default browser once the server is listening.
 
-On Windows, double-click `serve.bat` instead. It installs uv 0.12.1 into
-`%USERPROFILE%\.local\bin` if uv is missing, lets uv fetch Python 3.12 and the
-dependencies on the first run, and starts `esx serve --open`. It passes its
+On Windows, double-click `serve.bat` instead. If uv is missing, it downloads
+the uv 0.12.1 release from GitHub, refuses it unless its SHA-256 matches the
+one pinned in the file, and unpacks it into `%USERPROFILE%\.local\bin` (or
+`%UV_INSTALL_DIR%`). uv then fetches Python 3.12 and the dependencies on the
+first run, and the launcher starts `esx serve --open`. It passes its
 arguments on, so `serve.bat --port 8080` works, and it says so when
 `ANTHROPIC_API_KEY` is not set.
 

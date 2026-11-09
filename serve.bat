@@ -29,9 +29,13 @@ if errorlevel 1 (
 exit /b 0
 
 :find_or_install_uv
+rem The release archive is checked against the hash GitHub published for it,
+rem so nothing downloaded runs unless it is the file pinned here.
+set "UV_ZIP_URL=https://github.com/astral-sh/uv/releases/download/0.12.1/uv-x86_64-pc-windows-msvc.zip"
+set "UV_ZIP_SHA256=8fcb0cb46e1229065e344758980924e569bef5882ef45f46fada8fb24e06b74a"
 if not exist "%UV_INSTALL_DIR%\uv.exe" (
-    echo uv is not installed. Installing uv 0.12.1.
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/0.12.1/install.ps1 | iex"
+    echo uv is not installed. Downloading uv 0.12.1 and checking its SHA-256.
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; $zip = Join-Path $env:TEMP 'uv-0.12.1.zip'; Invoke-WebRequest -UseBasicParsing -Uri $env:UV_ZIP_URL -OutFile $zip; if ((Get-FileHash -Algorithm SHA256 $zip).Hash -ne $env:UV_ZIP_SHA256) { Remove-Item $zip; throw 'the download does not match the pinned SHA-256' }; Expand-Archive -Force $zip $env:UV_INSTALL_DIR; Remove-Item $zip"
     if errorlevel 1 exit /b 1
 )
 if not exist "%UV_INSTALL_DIR%\uv.exe" exit /b 1
