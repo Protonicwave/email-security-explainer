@@ -6,10 +6,10 @@ import httpx2
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
-from email_security_explainer.claims import check
+from email_security_explainer.claims import CheckReport, check
+from email_security_explainer.domain import DomainName
 from email_security_explainer.evaluate import (
     MAX_CASES,
-    Case,
     Condition,
     ConditionSummary,
     Failure,
@@ -27,11 +27,11 @@ from email_security_explainer.schema import Claim, Explanation
 
 CORPUS = Path(__file__).parent.parent / "cases" / "cases.json"
 RECORDS = DnsRecords(
+    domain=DomainName("softfail.example"),
     apex_txt=("v=spf1 ip4:192.0.2.0/24 ~all",),
     dmarc_txt=("v=DMARC1; p=none",),
 )
 FINDINGS = audit(RECORDS)
-CASE = Case("softfail.example", RECORDS)
 
 
 def claim(code: FindingCode, quoted_value: str | None, explanation: str = "Plain.") -> Claim:
@@ -64,7 +64,7 @@ def case_json(**overrides: object) -> str:
 def test_corpus_produces_every_finding_code() -> None:
     cases = load_cases(CORPUS.read_text(encoding="utf-8"))
 
-    produced = {finding.code for case in cases for finding in audit(case.records)}
+    produced = {finding.code for case in cases for finding in audit(case)}
 
     assert produced == set(FindingCode)
 
@@ -72,7 +72,13 @@ def test_corpus_produces_every_finding_code() -> None:
 def test_corpus_has_clean_cases_to_measure_invented_problems() -> None:
     cases = load_cases(CORPUS.read_text(encoding="utf-8"))
 
-    assert sum(not audit(case.records) for case in cases) >= 3
+    assert sum(not audit(case) for case in cases) >= 3
+
+
+def test_corpus_has_records_captured_from_real_domains() -> None:
+    cases = load_cases(CORPUS.read_text(encoding="utf-8"))
+
+    assert sum(case.domain.startswith("real-") for case in cases) >= 8
 
 
 def test_load_cases_builds_records_and_normalises_the_domain() -> None:
@@ -83,13 +89,11 @@ def test_load_cases_builds_records_and_normalises_the_domain() -> None:
     )
 
     assert load_cases(text) == [
-        Case(
-            "mixed.example",
-            DnsRecords(
-                apex_txt=("v=spf1 include:_spf.provider.example -all",),
-                dmarc_txt=("v=DMARC1; p=none",),
-                spf_by_domain={"_spf.provider.example": ("v=spf1 ip4:198.51.100.0/24 -all",)},
-            ),
+        DnsRecords(
+            domain=DomainName("mixed.example"),
+            apex_txt=("v=spf1 include:_spf.provider.example -all",),
+            dmarc_txt=("v=DMARC1; p=none",),
+            spf_by_domain={"_spf.provider.example": ("v=spf1 ip4:198.51.100.0/24 -all",)},
         )
     ]
 
@@ -124,7 +128,7 @@ def test_load_cases_accepts_unfetched_targets_beyond_the_lookup_limit() -> None:
 
     cases = load_cases(case_json(apex_txt=[f"v=spf1 {includes} -all"], spf_by_domain=spf_by_domain))
 
-    assert Finding(FindingCode.SPF_LOOKUP_LIMIT) in audit(cases[0].records)
+    assert Finding(FindingCode.SPF_LOOKUP_LIMIT) in audit(cases[0])
 
 
 def test_complete_explanation_scores_every_finding_explained() -> None:
@@ -171,12 +175,16 @@ class ScriptedModel:
         return answer
 
 
+def scored(outcome: CheckReport | Failure) -> Score | Failure:
+    return outcome if isinstance(outcome, Failure) else score(outcome)
+
+
 def run_once(
-    from_findings: ScriptedModel, from_records: ScriptedModel, case: Case = CASE
+    from_findings: ScriptedModel, from_records: ScriptedModel, case: DnsRecords = RECORDS
 ) -> dict[Condition, Score | Failure]:
     runs = list(evaluate([case], from_findings, from_records, repeats=1))
     assert [(run.domain, run.repeat) for run in runs] == [(case.domain, 1)] * len(Condition)
-    return {run.condition: run.outcome for run in runs}
+    return {run.condition: scored(run.outcome) for run in runs}
 
 
 def test_each_condition_is_scored_on_the_explanation_a_reader_would_see() -> None:
@@ -216,7 +224,9 @@ def test_checked_condition_repairs_the_first_answer_rather_than_asking_afresh() 
 
 
 def test_clean_case_still_asks_the_model_so_invented_problems_are_measured() -> None:
-    clean = Case("clean.example", DnsRecords(("v=spf1 -all",), ("v=DMARC1; p=reject; rua=x",)))
+    clean = DnsRecords(
+        DomainName("clean.example"), ("v=spf1 -all",), ("v=DMARC1; p=reject; rua=x",)
+    )
     from_findings = ScriptedModel(Explanation(summary="Fine.", claims=[INVENTED]), COMPLETE)
 
     outcomes = run_once(from_findings, ScriptedModel(COMPLETE), clean)
@@ -244,10 +254,12 @@ def test_model_without_an_explanation_fails_its_condition_and_the_run_continues(
     declined = ExplanationError("declined")
     from_findings = ScriptedModel(COMPLETE, declined)
 
-    runs = list(evaluate([CASE, CASE], from_findings, ScriptedModel(declined, COMPLETE), repeats=1))
+    runs = list(
+        evaluate([RECORDS, RECORDS], from_findings, ScriptedModel(declined, COMPLETE), repeats=1)
+    )
 
     failure = Failure(FailureKind.NO_EXPLANATION, "declined")
-    assert [run.outcome for run in runs] == [
+    assert [scored(run.outcome) for run in runs] == [
         failure,
         Score(3, 0, 0, 0),
         Score(3, 0, 0, 0),
@@ -280,27 +292,35 @@ def test_api_errors_that_retrying_cannot_fix_stop_the_evaluation() -> None:
 def test_repeats_run_every_case_again() -> None:
     model = ScriptedModel(*[COMPLETE] * 6)
 
-    runs = list(evaluate([CASE], model, model, repeats=2))
+    runs = list(evaluate([RECORDS], model, model, repeats=2))
 
     assert [(run.repeat, run.condition) for run in runs] == [
         (repeat, condition) for repeat in (1, 2) for condition in Condition
     ]
 
 
-def test_summarise_totals_each_condition() -> None:
-    def run(condition: Condition, outcome: Score | Failure) -> Run:
+def test_summarise_totals_each_condition_from_its_reports() -> None:
+    def run(condition: Condition, outcome: CheckReport | Failure) -> Run:
         return Run("a.example", 1, condition, outcome)
 
+    sloppy = Explanation(
+        summary="Your p=reject policy is undermined.",
+        claims=[
+            INVENTED,
+            WRONG_DETAIL,
+            claim(FindingCode.DMARC_NO_RUA, None, explanation="Unlike sp=reject."),
+        ],
+    )
     runs = [
-        run(Condition.RAW_RECORDS, Score(1, 2, 3, 4)),
-        run(Condition.RAW_RECORDS, Score(1, 1, 1, 1)),
+        run(Condition.RAW_RECORDS, check(FINDINGS, COMPLETE, RECORDS)),
+        run(Condition.RAW_RECORDS, check(FINDINGS, sloppy, RECORDS)),
         run(Condition.RAW_RECORDS, Failure(FailureKind.NO_EXPLANATION, "declined")),
         run(Condition.FINDINGS, Failure(FailureKind.API_UNAVAILABLE, "timeout")),
     ]
 
     assert summarise(runs) == [
         ConditionSummary(
-            Condition.RAW_RECORDS, scored=2, failed=1, errored=0, totals=Score(2, 3, 4, 5)
+            Condition.RAW_RECORDS, scored=2, failed=1, errored=0, totals=Score(3, 1, 3, 3)
         ),
         ConditionSummary(
             Condition.FINDINGS, scored=0, failed=0, errored=1, totals=Score(0, 0, 0, 0)

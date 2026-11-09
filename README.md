@@ -48,8 +48,13 @@ code. The command exits 1 when the model declines, stops early, returns output
 outside the schema, or the API cannot be reached.
 
 `esx eval` measures what the claim check is worth. It runs every case in
-`cases/cases.json` (recorded records for 21 domains, so no live DNS) under three
-conditions and scores each explanation a reader would see against the audit:
+`cases/cases.json` under three conditions and scores each explanation a reader
+would see against the audit. The 42 cases are recorded, so no live DNS: 31 are
+written for made-up domains, ten of them built at a rule's boundary,
+and 11 are real domains' records captured with `esx case`. Each real domain is
+renamed `real-01.example` to `real-11.example`, with its own name replaced
+wherever it appears; the mail providers it includes keep their real names. The
+conditions are:
 
 - `raw_records`: the model sees only the records and the auditor's rules, and
   finds the problems itself;
@@ -63,57 +68,79 @@ uv run esx eval --repeats 3 --output eval-results.jsonl
 
 It prints a table of explained, missed, invented and wrong-detail counts per
 condition, and writes each run to the `--output` file as one JSON line as soon
-as it finishes, so a run that stops part-way keeps what it has paid for. A run
+as it finishes, so a run that stops part-way keeps what it has paid for. Each
+line gives the counts, every claim's verdict with the record tokens it was
+rejected for and the prose of any claim that failed, the findings left
+unexplained, and any unsupported tokens in the summary. A run
 where the model declines or breaks the schema counts as failed; a connection,
 rate-limit or server error after the SDK's retries counts as errored. Either way
 the evaluation moves on to the next run. Other API errors, such as a bad key,
 stop it. The corpus is capped at 100 cases and `--repeats` at 10, which bounds
 a run at about 3,000 model calls.
 
+`esx case` prints a live domain's records, including its SPF include chain, as
+one case object in the corpus format, ready to add to `cases/cases.json`:
+
+```sh
+uv run esx case example.com
+```
+
 ## Results
 
-One run of `esx eval --repeats 3` on 8 November 2026 with `claude-sonnet-5-5`
-covered the 21 cases three times, which is 63 runs and 102 findings per
-condition:
+One run of `esx eval --repeats 3` on 9 November 2026 with `claude-sonnet-5-5`
+stopped during its second repeat, when the API account reached its monthly
+spend limit. The first repeat is complete: every condition ran on all 42 cases,
+which is 42 runs and 58 findings per condition.
 
-| Condition | Scored | Failed | Errored | Explained | Missed | Invented | Wrong detail |
+| Condition | Runs | Failed | Errored | Explained | Missed | Invented | Wrong detail |
 |---|---|---|---|---|---|---|---|
-| `raw_records` | 63 | 0 | 0 | 102 | 0 | 0 | 0 |
-| `findings` | 63 | 0 | 0 | 101 | 1 | 0 | 1 |
-| `findings_checked` | 63 | 0 | 0 | 102 | 0 | 0 | 0 |
+| `raw_records` | 42 | 0 | 0 | 58 | 0 | 0 | 0 |
+| `findings` | 42 | 0 | 0 | 57 | 1 | 0 | 1 |
+| `findings_checked` | 42 | 0 | 0 | 58 | 0 | 0 | 0 |
 
-The model made one mistake in 189 answers. In one `findings` answer for
-`dmarc-without-policy.example`, a claim failed the check on a detail, either the
-evidence it quoted or a record value in its prose, so its finding counted as
-missed. The run file records the counts but not the claim, so which of the two
-it was is not known. The repair round fixed it, and the checked condition
-explained every finding. In `findings_checked`, invented and wrong-detail claims
-are zero by construction, because the check drops them before the reader sees
-anything; what that row measures is how many findings survive, here all 102. One
-mistake does not separate the conditions, and the run does not show that the
-check is unnecessary. The cases are textbook misconfigurations with at most
-three findings each, and the `raw_records` condition is given the auditor's
-rules in words, which turns finding the problems into applying a written
-checklist to short records. The guarantee that no claim reaches the reader
-unless it matches a finding rests on the claim check's unit and mutation tests,
-not on this run. Telling the conditions apart needs harder cases: include chains
-close to the lookup limit, records that hit a rule's exception, and records
-copied from real domains. Every run is in `results/claude-sonnet-5-5.jsonl`.
+The seven runs of the second repeat that finished explained every finding with
+no errors; they are in the results file but not in the table.
+
+The runs were scored by the claim check at commit 2d31bbb. The one rejected
+claim was the check's mistake, not the model's. For `typos-in-records.example`
+the model explained the malformed term `ip:203.0.113.5` and named the address
+203.0.113.5 on its own. The address is in the record, but only inside that
+term, which that version of the check did not read, so it rejected a correct
+claim and the finding counted as missed; commit f44a103 makes the check read
+values inside malformed terms. The repair round passed, so the reader of the
+checked explanation saw every finding.
+
+The larger corpus still does not separate the conditions. Given the auditor's
+rules in words, the `raw_records` model found all 58 findings and invented none,
+on real include chains of up to 11 lookups and on cases built at each rule's
+boundary. No errors in 42 runs puts that condition's error rate per run below
+about 7% at 95% confidence, which is too wide to rank it against the others. In
+`findings_checked`, invented and wrong-detail claims are zero by construction,
+because the check drops them before the reader sees anything; what that row
+measures is how many findings survive, here all 58. The guarantee that no claim
+reaches the reader unless it matches a finding rests on the claim check's unit
+and mutation tests, not on this run. Whether the model stays this accurate
+without the rulebook is open: a condition that withholds the written rules
+would test its own judgement, but it would be scored against rules it was never
+shown. Every run is in `results/claude-sonnet-5-5.jsonl`.
 
 ## What it checks
 
 SPF (RFC 7208): a missing or duplicated record, syntax errors, `+all`, `?all`,
-no `all` and no `redirect`, `~all` without an enforcing DMARC policy, `ptr`,
-more than ten DNS lookups across the include chain, and includes or redirects
-that point at a domain without exactly one valid SPF record.
+no `all`, `~all` without an enforcing DMARC policy, `ptr`, more than ten DNS
+lookups across the include chain, and includes or redirects that point at a
+domain without exactly one valid SPF record. A record with no `all` of its own
+is judged by the `all` at the end of its `redirect` chain.
 
 DMARC (RFC 7489): a missing or duplicated record, syntax errors, `p=none`,
 `pct` below 100, `sp=none` under an enforcing policy, and no `rua` address for
 aggregate reports.
 
 Not checked: DKIM (finding a key needs a selector name that DNS does not
-reveal), MTA-STS, BIMI, the SPF void-lookup limit, and the organisational
-domain fallback for subdomains without their own DMARC record.
+reveal), MTA-STS, BIMI, the SPF void-lookup limit, the `all` of a `redirect`
+whose target is written with a macro (it depends on the message being
+checked), and the organisational domain fallback for subdomains without their
+own DMARC record.
 
 ## Development
 

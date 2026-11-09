@@ -43,17 +43,22 @@ The problems, by code:"""
 
 # The auditor's rules in words, so a model shown only the records is held to
 # the same rulebook as the auditor rather than to its own idea of a problem.
+_DECIDING_ALL = (
+    "the all term that decides the result (the record's own, or when it has none, "
+    "the one at the end of its redirect chain)"
+)
 _PROBLEM_BY_CODE = {
     FindingCode.SPF_MISSING: "no TXT record at the domain starts with v=spf1. Token: null.",
     FindingCode.SPF_MULTIPLE: "more than one TXT record starts with v=spf1. Token: null.",
     FindingCode.SPF_SYNTAX: "the SPF record has a term SPF syntax does not allow; one claim per "
     "such term. Token: the term. A missing, duplicated or malformed SPF record has no other "
     "SPF problem.",
-    FindingCode.SPF_ALL_PASS: "the all term passes every sender: +all, or all with no "
+    FindingCode.SPF_ALL_PASS: f"{_DECIDING_ALL} passes every sender: +all, or all with no "
     "qualifier. Token: the all term.",
-    FindingCode.SPF_ALL_NEUTRAL: "the all term is ?all. Token: ?all.",
-    FindingCode.SPF_NO_ALL: "the SPF record has neither an all term nor a redirect. Token: null.",
-    FindingCode.SPF_SOFTFAIL: "the all term is ~all and DMARC does not enforce: DMARC is "
+    FindingCode.SPF_ALL_NEUTRAL: f"{_DECIDING_ALL} is ?all. Token: ?all.",
+    FindingCode.SPF_NO_ALL: "neither the SPF record nor the end of its redirect chain has an "
+    "all term. Token: null.",
+    FindingCode.SPF_SOFTFAIL: f"{_DECIDING_ALL} is ~all and DMARC does not enforce: DMARC is "
     "missing or duplicated, has no valid p tag, has p=none, or has pct below 100. Token: ~all.",
     FindingCode.SPF_PTR: "the SPF record uses the ptr mechanism; one claim per ptr term. "
     "Token: the term.",
@@ -125,14 +130,12 @@ class ExplainResult:
     last_answer_check: CheckReport
 
 
-def explain(
-    domain: str, findings: Sequence[Finding], records: DnsRecords, generate: Generate
-) -> ExplainResult:
+def explain(findings: Sequence[Finding], records: DnsRecords, generate: Generate) -> ExplainResult:
     """Explain `findings`, with one repair round if the first answer fails the check.
 
     Raises ExplanationError from `generate`.
     """
-    request = findings_request(domain, findings, records)
+    request = findings_request(findings, records)
     return check_and_repair(request, generate(request), findings, records, generate)
 
 
@@ -182,9 +185,9 @@ def claude_generator(client: anthropic.Anthropic, model: str, system_prompt: str
     return generate
 
 
-def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecords) -> str:
+def findings_request(findings: Sequence[Finding], records: DnsRecords) -> str:
     """The request to pair with SYSTEM_PROMPT: the records and the findings."""
-    lines = [raw_records_request(domain, records), "", "Findings:"]
+    lines = [raw_records_request(records), "", "Findings:"]
     lines += [
         f"{number}. {finding.code} ({finding.record} record, {finding.severity} severity), "
         f"evidence: {_evidence_text(finding)}"
@@ -195,15 +198,30 @@ def findings_request(domain: str, findings: Sequence[Finding], records: DnsRecor
     return "\n".join(lines)
 
 
-def raw_records_request(domain: str, records: DnsRecords) -> str:
+def raw_records_request(records: DnsRecords) -> str:
     """The request to pair with RAW_RECORDS_SYSTEM_PROMPT: the records alone."""
+    domain = records.domain
     lines = [f"Domain: {domain}", "", "Records:"]
     lines += _record_lines(f"SPF at {domain}", spf.select_records(records.apex_txt))
     lines += _record_lines(f"DMARC at _dmarc.{domain}", records.dmarc_txt)
     for target, txt in sorted(records.spf_by_domain.items()):
-        label = f"SPF at {target}, reached by include or redirect"
-        lines += _record_lines(label, spf.select_records(txt))
+        lines += _record_lines(_target_label(target), spf.select_records(txt))
+    # A fetch stops once the walk passes the lookup limit. Marking what it left
+    # out keeps a model from reading a missing record as an unusable target.
+    reached = {
+        target
+        for txt in (records.apex_txt, *records.spf_by_domain.values())
+        for target in spf.lookup_targets(txt)
+    }
+    lines += [
+        f"{_target_label(target)}: not fetched, because the lookup limit was passed first"
+        for target in sorted(reached - records.spf_by_domain.keys())
+    ]
     return "\n".join(lines)
+
+
+def _target_label(target: str) -> str:
+    return f"SPF at {target}, reached by include or redirect"
 
 
 def _evidence_text(finding: Finding) -> str:

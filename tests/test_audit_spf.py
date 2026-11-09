@@ -3,8 +3,9 @@ from collections.abc import Mapping
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode, RecordKind, Severity
-from email_security_explainer.spf import walk_lookups
+from email_security_explainer.spf import lookup_targets, walk_lookups
 
 ENFORCING_DMARC = "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
 LONGEST_LABEL = "a" * 63
@@ -17,7 +18,12 @@ def spf_findings(
     dmarc: str = ENFORCING_DMARC,
     spf_by_domain: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[Finding]:
-    records = DnsRecords(apex_txt=apex_txt, dmarc_txt=(dmarc,), spf_by_domain=spf_by_domain or {})
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=apex_txt,
+        dmarc_txt=(dmarc,),
+        spf_by_domain=spf_by_domain or {},
+    )
     return [finding for finding in audit(records) if finding.record is RecordKind.SPF]
 
 
@@ -205,6 +211,116 @@ def test_redirect_ignored_when_all_present() -> None:
     assert spf_findings(("v=spf1 -all redirect=a.example.com",)) == []
 
 
+def test_all_at_the_end_of_a_redirect_decides_the_result() -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=a.example.com",),
+        spf_by_domain={"a.example.com": ("v=spf1 ip4:192.0.2.0/24 ?all",)},
+    )
+    assert findings == [Finding(FindingCode.SPF_ALL_NEUTRAL, "?all")]
+
+
+def test_redirect_chain_is_followed_to_the_record_with_all() -> None:
+    findings = spf_findings(
+        ("v=spf1 a redirect=a.example.com",),
+        spf_by_domain={
+            "a.example.com": ("v=spf1 redirect=b.example.com",),
+            "b.example.com": ("v=spf1 +all",),
+        },
+    )
+    assert findings == [Finding(FindingCode.SPF_ALL_PASS, "+all")]
+
+
+@pytest.mark.parametrize(
+    ("dmarc", "expected"),
+    [
+        (ENFORCING_DMARC, []),
+        (
+            "v=DMARC1; p=none; rua=mailto:dmarc@example.com",
+            [Finding(FindingCode.SPF_SOFTFAIL, "~all")],
+        ),
+    ],
+)
+def test_softfail_reached_by_redirect_is_tolerated_only_under_enforcing_dmarc(
+    dmarc: str, expected: list[Finding]
+) -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=a.example.com",),
+        dmarc=dmarc,
+        spf_by_domain={"a.example.com": ("v=spf1 ~all",)},
+    )
+    assert findings == expected
+
+
+def test_redirect_to_a_record_without_all_has_no_all() -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=a.example.com",),
+        spf_by_domain={"a.example.com": ("v=spf1 ip4:192.0.2.0/24",)},
+    )
+    assert findings == [Finding(FindingCode.SPF_NO_ALL)]
+
+
+def test_redirect_to_a_macro_target_reports_no_all_finding() -> None:
+    assert spf_findings(("v=spf1 redirect=%{d}._spf.example.com",)) == []
+
+
+def test_redirect_left_unfetched_past_the_lookup_limit_reports_only_the_limit() -> None:
+    terms = " ".join(f"a:h{index}.example.com" for index in range(10))
+    findings = spf_findings((f"v=spf1 {terms} redirect=gone.example.com",))
+    assert findings == [Finding(FindingCode.SPF_LOOKUP_LIMIT)]
+
+
+@pytest.mark.parametrize(
+    ("txt_records", "targets"),
+    [
+        (
+            ("v=spf1 a include:A.example.com. redirect=b.example.com",),
+            ["a.example.com", "b.example.com"],
+        ),
+        (("v=spf1 include:%{i}.example.com -all",), []),
+        (("v=spf1 -all redirect=b.example.com",), []),
+        (("verification=abc",), []),
+        (("v=spf1 include:a.example.com -all", "v=spf1 -all"), []),
+    ],
+)
+def test_lookup_targets_lists_the_targets_a_record_sends_lookups_to(
+    txt_records: tuple[str, ...], targets: list[str]
+) -> None:
+    assert lookup_targets(txt_records) == targets
+
+
+def redirect_chain(length: int, final: str) -> dict[str, tuple[str, ...]]:
+    chain = {
+        f"r{index}.example.com": (f"v=spf1 redirect=r{index + 1}.example.com",)
+        for index in range(1, length)
+    }
+    return {**chain, f"r{length}.example.com": (final,)}
+
+
+def test_all_after_ten_redirects_still_decides_the_result() -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=r1.example.com",), spf_by_domain=redirect_chain(10, "v=spf1 ?all")
+    )
+    assert findings == [Finding(FindingCode.SPF_ALL_NEUTRAL, "?all")]
+
+
+def test_redirect_chain_past_the_lookup_limit_reports_only_the_limit() -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=r1.example.com",), spf_by_domain=redirect_chain(11, "v=spf1 ?all")
+    )
+    assert findings == [Finding(FindingCode.SPF_LOOKUP_LIMIT)]
+
+
+def test_redirect_loop_reports_only_the_lookup_limit() -> None:
+    findings = spf_findings(
+        ("v=spf1 redirect=a.example.com",),
+        spf_by_domain={
+            "a.example.com": ("v=spf1 redirect=b.example.com",),
+            "b.example.com": ("v=spf1 redirect=a.example.com",),
+        },
+    )
+    assert findings == [Finding(FindingCode.SPF_LOOKUP_LIMIT)]
+
+
 def test_ten_lookups_is_within_limit() -> None:
     terms = " ".join(f"a:h{index}.example.com" for index in range(10))
     assert spf_findings((f"v=spf1 {terms} -all",)) == []
@@ -238,7 +354,11 @@ def test_every_code_has_a_severity() -> None:
 
 
 def test_softfail_reported_when_dmarc_records_conflict() -> None:
-    records = DnsRecords(apex_txt=("v=spf1 ~all",), dmarc_txt=(ENFORCING_DMARC, ENFORCING_DMARC))
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=("v=spf1 ~all",),
+        dmarc_txt=(ENFORCING_DMARC, ENFORCING_DMARC),
+    )
 
     assert Finding(FindingCode.SPF_SOFTFAIL, "~all") in audit(records)
 

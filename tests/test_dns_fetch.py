@@ -30,6 +30,7 @@ def test_fetches_apex_and_dmarc() -> None:
         {"example.com": ("v=spf1 -all",), "_dmarc.example.com": ("v=DMARC1; p=reject",)}
     )
     records = fetch_records(DOMAIN, lookup)
+    assert records.domain == DOMAIN
     assert records.apex_txt == ("v=spf1 -all",)
     assert records.dmarc_txt == ("v=DMARC1; p=reject",)
     assert records.spf_by_domain == {}

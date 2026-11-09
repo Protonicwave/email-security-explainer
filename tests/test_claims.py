@@ -1,11 +1,15 @@
+import ipaddress
+
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.claims import CheckReport, Verdict, check
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
 
 RECORDS = DnsRecords(
+    domain=DomainName("example.com"),
     apex_txt=(
         "verification=abc include:verify.example.org",
         "v=spf1 include:_spf.mail.example.net ~all",
@@ -132,7 +136,9 @@ def test_claim_after_a_rejected_claim_for_the_same_finding_is_accepted() -> None
     assert report.missed == ()
 
 
-SYNTAX_RECORDS = DnsRecords(apex_txt=("v=spf1 foo bar -all",), dmarc_txt=())
+SYNTAX_RECORDS = DnsRecords(
+    domain=DomainName("example.com"), apex_txt=("v=spf1 foo bar -all",), dmarc_txt=()
+)
 SYNTAX_FINDINGS = [
     Finding(FindingCode.SPF_SYNTAX, "foo"),
     Finding(FindingCode.SPF_SYNTAX, "bar"),
@@ -160,7 +166,9 @@ def test_findings_sharing_a_code_are_matched_by_evidence() -> None:
 
 
 def test_identical_findings_each_need_their_own_claim() -> None:
-    records = DnsRecords(apex_txt=("v=spf1 foo foo -all",), dmarc_txt=())
+    records = DnsRecords(
+        domain=DomainName("example.com"), apex_txt=("v=spf1 foo foo -all",), dmarc_txt=()
+    )
     findings = audit(records)
     assert findings.count(Finding(FindingCode.SPF_SYNTAX, "foo")) == 2
 
@@ -265,6 +273,31 @@ def test_spaces_around_equals_do_not_hide_a_token() -> None:
     assert report.claim_checks[0].unsupported_tokens == ("p=reject",)
 
 
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("The record says p= Quarantine today.", "p=quarantine"),
+        ("The record says pct= 50 today.", "pct=50"),
+        ("The record says adkim= s today.", "adkim=s"),
+        ("Reports go to rua= mailto:d@evil.example today.", "rua=mailto:d@evil.example"),
+    ],
+)
+def test_a_value_after_a_spaced_equals_is_read_with_its_tag(summary: str, token: str) -> None:
+    assert summary_tokens(summary) == (token,)
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "The record has no policy (the p= tag).",
+        "Set the sp= setting to match.",
+        "The rua= tag: it lists where reports go.",
+    ],
+)
+def test_a_word_after_a_spaced_equals_is_not_read_as_a_value(summary: str) -> None:
+    assert summary_tokens(summary) == ()
+
+
 def test_curly_quotes_around_a_token_are_not_part_of_it() -> None:
     explanation = "Your record says \u2018p=none\u2019 and \u201c~all\u201d."
 
@@ -275,6 +308,7 @@ def test_curly_quotes_around_a_token_are_not_part_of_it() -> None:
 
 def test_each_address_in_a_report_list_is_supported() -> None:
     records = DnsRecords(
+        domain=DomainName("example.com"),
         apex_txt=("v=spf1 ~all",),
         dmarc_txt=("v=DMARC1; p=none; rua=mailto:a@reports.example, mailto:b@reports.example",),
     )
@@ -284,3 +318,134 @@ def test_each_address_in_a_report_list_is_supported() -> None:
     report = run_check([softfail], findings=audit(records), records=records)
 
     assert report.claim_checks[0].verdict is Verdict.ACCEPTED
+
+
+ADDRESS_RECORDS = DnsRecords(
+    domain=DomainName("example.com"),
+    apex_txt=(
+        "v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 ip6:2001:0DB8:0:0:0:0:0:5"
+        " ip6:::ffff:192.0.2.10 include:_spf.mail.example.net -all",
+    ),
+    dmarc_txt=("v=DMARC1; p=reject; rua=mailto:dmarc@reports.example.net!10m",),
+)
+
+
+def summary_tokens(summary: str) -> tuple[str, ...]:
+    return run_check([], summary, findings=[], records=ADDRESS_RECORDS).summary_unsupported_tokens
+
+
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("Mail from 198.51.100.7 passes.", "198.51.100.7"),
+        ("Mail from 192.0.2.5 passes.", "192.0.2.5"),
+        ("Mail from 192.0.2.0/25 passes.", "192.0.2.0/25"),
+        ("Mail from 2001:DB8::6 passes.", "2001:db8::6"),
+        ("Mail from 2001:db8::6: it passes.", "2001:db8::6"),
+        ("Mail from 2001:db8::/48 passes.", "2001:db8::/48"),
+        # Python 3.12 releases differ in how they print this form, so the
+        # expected token comes from ipaddress, as the check's does.
+        ("Mail from ::ffff:198.51.100.7 passes.", str(ipaddress.ip_address("::ffff:198.51.100.7"))),
+    ],
+)
+def test_bare_address_absent_from_the_records_is_unsupported(summary: str, token: str) -> None:
+    assert summary_tokens(summary) == (token,)
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "192.0.2.0/24",
+        "2001:db8::/32",
+        "2001:0DB8:0000::/32",
+        "2001:db8::5",
+        "2001:db8:0:0:0:0:0:5",
+        "::ffff:192.0.2.10",
+        "::ffff:c000:20a",
+    ],
+)
+def test_bare_address_in_the_records_is_supported_in_any_form(address: str) -> None:
+    assert summary_tokens(f"Mail from {address} passes.") == ()
+
+
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("Mail passes through evil.example.", "evil.example"),
+        ("Mail passes through Mail.Evil.example today.", "mail.evil.example"),
+        ("Reports go to dmarc@evil.example.", "evil.example"),
+        ("Reports go to first.last@evil.example.", "evil.example"),
+        ("See https://evil.example/dmarc for details.", "evil.example"),
+    ],
+)
+def test_bare_domain_absent_from_the_records_is_unsupported(summary: str, token: str) -> None:
+    assert summary_tokens(summary) == (token,)
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "example.com",
+        "EXAMPLE.COM.",
+        "_dmarc.example.com",
+        "_spf.mail.example.net",
+        "reports.example.net",
+        "dmarc@reports.example.net",
+    ],
+)
+def test_audited_domain_and_domains_in_the_records_are_supported(domain: str) -> None:
+    assert summary_tokens(f"Mail for {domain} is covered.") == ()
+
+
+@pytest.mark.parametrize("value", ["203.0.113.5", "198.51.100.0/24", "_spf.mail.example.org"])
+def test_value_inside_a_malformed_term_is_supported(value: str) -> None:
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=("v=spf1 ip:203.0.113.5 ip4=198.51.100.0/24 inlcude:_spf.mail.example.org -all",),
+        dmarc_txt=("v=DMARC1; p=reject",),
+    )
+
+    report = run_check([], f"Mail from {value} passes.", findings=[], records=records)
+
+    assert report.summary_unsupported_tokens == ()
+
+
+@pytest.mark.parametrize("domain", ["billing.example.com", "Accounts.Billing.Example.com."])
+def test_illustrative_subdomain_of_the_audited_domain_is_supported(domain: str) -> None:
+    assert summary_tokens(f"Mail from a made-up name such as {domain} passes.") == ()
+
+
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("Your record includes _spf.example.com.", "_spf.example.com"),
+        ("The key is at s1._domainkey.example.com.", "s1._domainkey.example.com"),
+        ("Mail passes through notexample.com today.", "notexample.com"),
+        (
+            "Mail passes through billing.example.com.evil.example.",
+            "billing.example.com.evil.example",
+        ),
+        ("Your record has include:billing.example.com in it.", "include:billing.example.com"),
+        (
+            "Reports go to rua=mailto:d@billing.example.com today.",
+            "rua=mailto:d@billing.example.com",
+        ),
+    ],
+)
+def test_service_names_lookalikes_and_record_tokens_under_the_domain_are_unsupported(
+    summary: str, token: str
+) -> None:
+    assert summary_tokens(summary) == (token,)
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "Senders, e.g. a newsletter tool, i.e. anyone, can pass.",
+        "Since version 1.6 and v1.2 the tag reads DMARC1.",
+        "The record changed at 12:30:45 yesterday.",
+        "An address such as 999.1.1.1 or 192.0.2.0/33 is malformed.",
+    ],
+)
+def test_abbreviations_versions_times_and_malformed_addresses_are_not_tokens(summary: str) -> None:
+    assert summary_tokens(summary) == ()

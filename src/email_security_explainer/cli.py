@@ -1,4 +1,4 @@
-"""Command-line entry point: `esx audit`, `esx explain` and `esx eval`."""
+"""Command-line entry point: `esx audit`, `esx explain`, `esx eval` and `esx case`."""
 
 import argparse
 import dataclasses
@@ -13,15 +13,17 @@ from typing import Any
 import anthropic
 
 from email_security_explainer.audit import audit
+from email_security_explainer.claims import CheckReport, ClaimCheck
 from email_security_explainer.dns_fetch import DnsLookupError, TxtLookup, fetch_records, lookup_txt
 from email_security_explainer.domain import parse_domain
 from email_security_explainer.evaluate import (
     ConditionSummary,
     Failure,
     Run,
-    Score,
+    dump_case,
     evaluate,
     load_cases,
+    score,
     summarise,
 )
 from email_security_explainer.explain import (
@@ -68,6 +70,8 @@ def main(
     try:
         if args.command == "eval":
             output = _evaluate(args, generator_for)
+        elif args.command == "case":
+            output = dump_case(fetch_records(parse_domain(args.domain), lookup))
         else:
             output = _audit_or_explain(args, lookup, generator_for)
     except (
@@ -112,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"where to write every run as JSON Lines (default: {DEFAULT_RESULTS_PATH})",
     )
     _add_model_option(eval_command)
+    case_command = commands.add_parser(
+        "case", help="print a domain's records as a case for the evaluation corpus"
+    )
+    case_command.add_argument("domain", help="domain to capture, such as example.com")
     return parser
 
 
@@ -140,7 +148,7 @@ def _audit_or_explain(
         return _render_json(domain, findings) if args.json else _render_text(domain, findings)
     if not findings:
         return _render_text(domain, findings)
-    result = explain(domain, findings, records, generator_for(args.model, SYSTEM_PROMPT))
+    result = explain(findings, records, generator_for(args.model, SYSTEM_PROMPT))
     return _render_explanation(domain, findings, result)
 
 
@@ -226,12 +234,13 @@ def _render_summary(summaries: list[ConditionSummary]) -> str:
     return "\n".join(lines)
 
 
-def _outcome_text(outcome: Score | Failure) -> str:
+def _outcome_text(outcome: CheckReport | Failure) -> str:
     if isinstance(outcome, Failure):
         return f"{outcome.kind} ({outcome.message})"
+    counts = score(outcome)
     return (
-        f"explained {outcome.explained}, missed {outcome.missed}, "
-        f"invented {outcome.invented}, wrong detail {outcome.wrong_detail}"
+        f"explained {counts.explained}, missed {counts.missed}, "
+        f"invented {counts.invented}, wrong detail {counts.wrong_detail}"
     )
 
 
@@ -239,7 +248,7 @@ def _run_fields(model: str, run: Run) -> dict[str, Any]:
     if isinstance(run.outcome, Failure):
         outcome: dict[str, Any] = {"outcome": run.outcome.kind, "message": run.outcome.message}
     else:
-        outcome = {"outcome": "scored", **dataclasses.asdict(run.outcome)}
+        outcome = {"outcome": "scored", **_report_fields(run.outcome)}
     return {
         "model": model,
         "domain": run.domain,
@@ -247,3 +256,29 @@ def _run_fields(model: str, run: Run) -> dict[str, Any]:
         "condition": run.condition,
         **outcome,
     }
+
+
+def _report_fields(report: CheckReport) -> dict[str, Any]:
+    return {
+        **dataclasses.asdict(score(report)),
+        "claims": [_claim_fields(claim_check) for claim_check in report.claim_checks],
+        "missed_findings": [
+            {"code": finding.code, "evidence": finding.evidence} for finding in report.missed
+        ],
+        "summary_unsupported_tokens": list(report.summary_unsupported_tokens),
+    }
+
+
+def _claim_fields(claim_check: ClaimCheck) -> dict[str, Any]:
+    claim = claim_check.claim
+    fields: dict[str, Any] = {
+        "finding_code": claim.finding_code,
+        "quoted_value": claim.quoted_value,
+        "verdict": claim_check.verdict,
+        "unsupported_tokens": list(claim_check.unsupported_tokens),
+    }
+    # An accepted claim's prose explains no failure, and leaving it out keeps
+    # the run file small.
+    if not claim_check.is_accepted:
+        fields["explanation"] = claim.explanation
+    return fields

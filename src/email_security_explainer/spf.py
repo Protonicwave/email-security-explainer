@@ -223,6 +223,18 @@ def walk_lookups(
     return LookupWalk(lookup_count, frozenset(unresolved), tuple(dict.fromkeys(unusable)))
 
 
+def lookup_targets(txt_records: tuple[str, ...]) -> list[str]:
+    """The include and redirect targets the SPF record among `txt_records`
+    sends a lookup to, or none when there is not exactly one valid record."""
+    record = _single_valid_record(txt_records)
+    if record is None:
+        return []
+    targets = (
+        _followable_target(term) for term in record.terms if _causes_lookup(term, record.has_all)
+    )
+    return [target for target in targets if target is not None]
+
+
 def _single_valid_record(txt_records: tuple[str, ...]) -> ParsedRecord | None:
     match select_records(txt_records):
         case (record,):
@@ -262,7 +274,9 @@ def assess(
             return [Finding(FindingCode.SPF_MULTIPLE)]
     if parsed.invalid_terms:
         return [Finding(FindingCode.SPF_SYNTAX, term) for term in parsed.invalid_terms]
-    findings = _all_mechanism_findings(parsed, is_dmarc_enforcing=is_dmarc_enforcing)
+    findings = _all_mechanism_findings(
+        _deciding_record(parsed, spf_by_domain), is_dmarc_enforcing=is_dmarc_enforcing
+    )
     findings += [
         Finding(FindingCode.SPF_PTR, term.text) for term in parsed.terms if term.name == "ptr"
     ]
@@ -274,17 +288,48 @@ def assess(
     return findings
 
 
+def _deciding_record(
+    parsed: ParsedRecord, spf_by_domain: Mapping[str, tuple[str, ...]]
+) -> ParsedRecord | None:
+    """The record whose `all` decides the result: `parsed`, or the end of its
+    redirect chain. None when the chain cannot be followed: a target that is
+    missing, unusable or past the lookup limit, which SPF_TARGET_UNUSABLE and
+    SPF_LOOKUP_LIMIT report, or a target written with a macro, which depends on
+    the message and so cannot be judged in advance.
+
+    RFC 7208 section 6.1: without an all mechanism, the redirect target's
+    result is the record's result.
+    """
+    record = parsed
+    # One pass per record, so the limit's redirects reach limit + 1 records. The
+    # tests pin the bound; 10 | 1 and 10 ^ 1 also make 11, so those mutants are
+    # equivalent.
+    for _ in range(MAX_SPF_LOOKUPS + 1):  # pragma: no mutate
+        redirect = next((term for term in record.terms if term.name == "redirect"), None)
+        if record.has_all or redirect is None:
+            return record
+        target = _followable_target(redirect)
+        if target is None or target not in spf_by_domain:
+            return None
+        target_record = _single_valid_record(spf_by_domain[target])
+        if target_record is None:
+            return None
+        record = target_record
+    return None
+
+
 def _all_mechanism_findings(
-    parsed: ParsedRecord,
+    record: ParsedRecord | None,
     *,  # pragma: no mutate: mutated to /, keyword callers still work
     is_dmarc_enforcing: bool,
 ) -> list[Finding]:
+    if record is None:
+        return []
     all_term = next(
-        (term for term in parsed.terms if term.name == "all" and not term.is_modifier), None
+        (term for term in record.terms if term.name == "all" and not term.is_modifier), None
     )
     if all_term is None:
-        has_redirect = any(term.name == "redirect" for term in parsed.terms)
-        return [] if has_redirect else [Finding(FindingCode.SPF_NO_ALL)]
+        return [Finding(FindingCode.SPF_NO_ALL)]
     code = _ALL_FINDING_BY_QUALIFIER.get(all_term.qualifier)
     # A soft fail is accepted practice when DMARC already rejects or quarantines
     # unauthenticated mail; without that, receivers usually deliver it.

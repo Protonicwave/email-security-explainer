@@ -1,6 +1,7 @@
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
+from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode, RecordKind
 
 CLEAN_SPF = "v=spf1 ip4:192.0.2.1 -all"
@@ -8,7 +9,9 @@ RUA = "rua=mailto:dmarc@example.com"
 
 
 def dmarc_findings(dmarc_txt: tuple[str, ...]) -> list[Finding]:
-    records = DnsRecords(apex_txt=(CLEAN_SPF,), dmarc_txt=dmarc_txt)
+    records = DnsRecords(
+        domain=DomainName("example.com"), apex_txt=(CLEAN_SPF,), dmarc_txt=dmarc_txt
+    )
     return [finding for finding in audit(records) if finding.record is RecordKind.DMARC]
 
 

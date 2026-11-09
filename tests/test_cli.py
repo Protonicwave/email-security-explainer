@@ -8,8 +8,11 @@ import anthropic
 import httpx2
 import pytest
 
+from email_security_explainer.audit import audit
 from email_security_explainer.cli import EXIT_FAILURE, EXIT_OK, main
-from email_security_explainer.dns_fetch import DnsLookupError
+from email_security_explainer.dns_fetch import DnsLookupError, fetch_records
+from email_security_explainer.domain import DomainName
+from email_security_explainer.evaluate import load_cases
 from email_security_explainer.explain import (
     DEFAULT_MODEL,
     RAW_RECORDS_SYSTEM_PROMPT,
@@ -75,6 +78,39 @@ def test_dns_failure_fails(capsys: pytest.CaptureFixture[str]) -> None:
 
     assert main(["audit", "example.com"], failing_lookup) == EXIT_FAILURE
     assert "timed out" in capsys.readouterr().err
+
+
+def captured_case(table: Mapping[str, tuple[str, ...]], capsys: pytest.CaptureFixture[str]) -> str:
+    assert run(["case", "Example.com"], table) == EXIT_OK
+    return capsys.readouterr().out
+
+
+def test_case_prints_a_case_that_audits_the_same_as_the_live_domain(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    table = {
+        "example.com": ("v=spf1 include:_spf.provider.example ~all", "site-verification=abc"),
+        "_dmarc.example.com": ("v=DMARC1; p=none",),
+        "_spf.provider.example": ("v=spf1 ip4:198.51.100.0/24 -all",),
+    }
+
+    (case,) = load_cases(f"[{captured_case(table, capsys)}]")
+
+    live = fetch_records(DomainName("example.com"), lambda name: table.get(name, ()))
+    assert case == live
+    assert audit(case) == audit(live)
+
+
+def test_case_keeps_a_chain_cut_off_at_the_lookup_limit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    includes = " ".join(f"include:spf{number}.example" for number in range(12))
+    table = {"example.com": (f"v=spf1 {includes} -all",)}
+    table |= {f"spf{number}.example": ("v=spf1 -all",) for number in range(12)}
+
+    (case,) = load_cases(f"[{captured_case(table, capsys)}]")
+
+    assert FindingCode.SPF_LOOKUP_LIMIT in {finding.code for finding in audit(case)}
 
 
 SOFTFAIL = {
@@ -271,7 +307,54 @@ def test_eval_writes_every_run_as_a_json_line(tmp_path: Path) -> None:
         "invented": 0,
         "missed": 1,
         "wrong_detail": 0,
+        "claims": [
+            {
+                "finding_code": "SPF_SOFTFAIL",
+                "quoted_value": "~all",
+                "verdict": "accepted",
+                "unsupported_tokens": [],
+            }
+        ],
+        "missed_findings": [{"code": "DMARC_POLICY_NONE", "evidence": "p=none"}],
+        "summary_unsupported_tokens": [],
     }
+
+
+def test_eval_records_why_each_claim_failed_and_quotes_its_prose(tmp_path: Path) -> None:
+    invented = Claim(
+        finding_code=FindingCode.SPF_ALL_PASS,
+        quoted_value="+all",
+        explanation="Anyone may send.",
+        fix="Remove +all.",
+    )
+    unsupported = softfail_claim().model_copy(update={"explanation": "Weaker than -all."})
+    answer = Explanation(summary="Your p=reject policy is ignored.", claims=[invented, unsupported])
+    output = tmp_path / "results.jsonl"
+
+    assert eval_with_model(tmp_path, lambda request: answer, output) == EXIT_OK
+
+    run = written_runs(output)[0]
+    assert run["claims"] == [
+        {
+            "finding_code": "SPF_ALL_PASS",
+            "quoted_value": "+all",
+            "verdict": "invented",
+            "unsupported_tokens": [],
+            "explanation": "Anyone may send.",
+        },
+        {
+            "finding_code": "SPF_SOFTFAIL",
+            "quoted_value": "~all",
+            "verdict": "unsupported_token",
+            "unsupported_tokens": ["-all"],
+            "explanation": "Weaker than -all.",
+        },
+    ]
+    assert run["missed_findings"] == [
+        {"code": "SPF_SOFTFAIL", "evidence": "~all"},
+        {"code": "DMARC_POLICY_NONE", "evidence": "p=none"},
+    ]
+    assert run["summary_unsupported_tokens"] == ["p=reject"]
 
 
 def eval_with_model(tmp_path: Path, model: Generate, output: Path) -> int:
