@@ -4,9 +4,10 @@
 // a text node, never as markup, so a TXT record cannot inject anything.
 
 const REQUEST_TIMEOUT_MS = 90000;
-// The server allows each model call two minutes and a repair round doubles
-// the calls, so a slow answer can take several minutes.
-const EXPLAIN_TIMEOUT_MS = 300000;
+// The server makes at most two model calls, a first answer and a repair, and
+// gives each up to three attempts of two minutes with seconds of back-off
+// between them, which comes to about twelve and a half minutes.
+const EXPLAIN_TIMEOUT_MS = 13 * 60 * 1000;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEVERITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
 const RECORD_LABELS = { spf: "SPF", dmarc: "DMARC" };
@@ -18,7 +19,9 @@ const DROPPED_PATH = "M4 8h8";
 // Each check takes the next number, and a reply for an earlier check is dropped,
 // so a slow explanation cannot land on another domain's audit.
 let checkNumber = 0;
-let explainController = null;
+// esx writes one explanation at a time and cannot stop one the model has
+// started, so each explain request waits for the one before it to settle.
+let lastExplainRequest = Promise.resolve(null);
 
 const form = document.getElementById("check-form");
 const input = document.getElementById("domain");
@@ -403,14 +406,18 @@ function renderExplanation(view) {
 }
 
 async function explainFindings(audited, number) {
-  explainController = new AbortController();
-  const signal = AbortSignal.any([explainController.signal, AbortSignal.timeout(EXPLAIN_TIMEOUT_MS)]);
   const askAgain = () => explainFindings(audited, number);
   showExplaining(audited);
+  // A check replaced while it waits never sends its request.
+  const request = lastExplainRequest.then(() =>
+    number === checkNumber ? post("/api/explain", audited.domain, AbortSignal.timeout(EXPLAIN_TIMEOUT_MS)) : null,
+  );
+  lastExplainRequest = request.catch(() => null);
   let response;
   let explained;
   try {
-    response = await post("/api/explain", audited.domain, signal);
+    response = await request;
+    if (response === null) return;
     explained = response.ok ? await response.json() : null;
   } catch (error) {
     if (number !== checkNumber) return;
@@ -518,16 +525,18 @@ function post(path, domain, signal) {
 
 async function check(domain) {
   const number = ++checkNumber;
-  explainController?.abort();
   showFieldError("");
   setBusy(true);
   document.getElementById("checking-domain").textContent = domain;
   show("checking");
   document.getElementById("checking-title").focus();
   let response;
+  let view;
   try {
     response = await post("/api/audit", domain, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+    view = response.ok ? await response.json() : null;
   } catch {
+    if (number !== checkNumber) return;
     showStopped(
       [document.createTextNode("The page lost contact with esx.")],
       "No answer came back, so nothing was audited.",
@@ -538,8 +547,8 @@ async function check(domain) {
   } finally {
     setBusy(false);
   }
-  if (response.ok) {
-    const view = await response.json();
+  if (number !== checkNumber) return;
+  if (view) {
     input.value = view.domain;
     renderAudit(view, number);
     return;
