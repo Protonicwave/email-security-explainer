@@ -205,9 +205,23 @@ def raw_records_request(records: DnsRecords) -> str:
     lines += _record_lines(f"SPF at {domain}", spf.select_records(records.apex_txt))
     lines += _record_lines(f"DMARC at _dmarc.{domain}", records.dmarc_txt)
     for target, txt in sorted(records.spf_by_domain.items()):
-        label = f"SPF at {target}, reached by include or redirect"
-        lines += _record_lines(label, spf.select_records(txt))
+        lines += _record_lines(_target_label(target), spf.select_records(txt))
+    # A fetch stops once the walk passes the lookup limit. Marking what it left
+    # out keeps a model from reading a missing record as an unusable target.
+    reached = {
+        target
+        for txt in (records.apex_txt, *records.spf_by_domain.values())
+        for target in spf.lookup_targets(txt)
+    }
+    lines += [
+        f"{_target_label(target)}: not fetched, because the lookup limit was passed first"
+        for target in sorted(reached - records.spf_by_domain.keys())
+    ]
     return "\n".join(lines)
+
+
+def _target_label(target: str) -> str:
+    return f"SPF at {target}, reached by include or redirect"
 
 
 def _evidence_text(finding: Finding) -> str:

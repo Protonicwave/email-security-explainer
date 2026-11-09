@@ -223,6 +223,18 @@ def walk_lookups(
     return LookupWalk(lookup_count, frozenset(unresolved), tuple(dict.fromkeys(unusable)))
 
 
+def lookup_targets(txt_records: tuple[str, ...]) -> list[str]:
+    """The include and redirect targets the SPF record among `txt_records`
+    sends a lookup to, or none when there is not exactly one valid record."""
+    record = _single_valid_record(txt_records)
+    if record is None:
+        return []
+    targets = (
+        _followable_target(term) for term in record.terms if _causes_lookup(term, record.has_all)
+    )
+    return [target for target in targets if target is not None]
+
+
 def _single_valid_record(txt_records: tuple[str, ...]) -> ParsedRecord | None:
     match select_records(txt_records):
         case (record,):

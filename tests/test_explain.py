@@ -14,6 +14,7 @@ from email_security_explainer.explain import (
     ExplanationError,
     claude_generator,
     explain,
+    raw_records_request,
 )
 from email_security_explainer.findings import Finding, FindingCode
 from email_security_explainer.schema import Claim, Explanation
@@ -103,6 +104,35 @@ def test_request_marks_absent_records_and_findings() -> None:
         "Findings:",
         "none",
     ]
+
+
+def test_request_marks_targets_past_the_lookup_limit_as_not_fetched() -> None:
+    includes = " ".join(f"include:spf{number}.example.net" for number in range(11))
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=(f"v=spf1 {includes} -all",),
+        dmarc_txt=("v=DMARC1; p=reject",),
+        spf_by_domain={f"spf{number}.example.net": ("v=spf1 -all",) for number in range(10)},
+    )
+
+    lines = raw_records_request(records).splitlines()
+
+    assert [line for line in lines if "not fetched" in line] == [
+        "SPF at spf10.example.net, reached by include or redirect: "
+        "not fetched, because the lookup limit was passed first"
+    ]
+
+
+@pytest.mark.parametrize(
+    "spf_record",
+    ["v=spf1 -all redirect=ignored.example.net", "v=spf1 include:%{i}._spf.example.net -all"],
+)
+def test_request_does_not_mark_targets_no_lookup_reaches(spf_record: str) -> None:
+    records = DnsRecords(
+        domain=DomainName("example.com"), apex_txt=(spf_record,), dmarc_txt=("v=DMARC1; p=reject",)
+    )
+
+    assert "not fetched" not in raw_records_request(records)
 
 
 def test_failing_answer_gets_one_repair_round_listing_its_problems() -> None:
