@@ -113,9 +113,10 @@ copied from real domains. Every run is in `results/claude-sonnet-5-5.jsonl`.
 ## What it checks
 
 SPF (RFC 7208): a missing or duplicated record, syntax errors, `+all`, `?all`,
-no `all` and no `redirect`, `~all` without an enforcing DMARC policy, `ptr`,
-more than ten DNS lookups across the include chain, and includes or redirects
-that point at a domain without exactly one valid SPF record.
+no `all`, `~all` without an enforcing DMARC policy, `ptr`, more than ten DNS
+lookups across the include chain, and includes or redirects that point at a
+domain without exactly one valid SPF record. A record with no `all` of its own
+is judged by the `all` at the end of its `redirect` chain.
 
 DMARC (RFC 7489): a missing or duplicated record, syntax errors, `p=none`,
 `pct` below 100, `sp=none` under an enforcing policy, and no `rua` address for

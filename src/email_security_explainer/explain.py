@@ -43,17 +43,22 @@ The problems, by code:"""
 
 # The auditor's rules in words, so a model shown only the records is held to
 # the same rulebook as the auditor rather than to its own idea of a problem.
+_DECIDING_ALL = (
+    "the all term that decides the result (the record's own, or when it has none, "
+    "the one at the end of its redirect chain)"
+)
 _PROBLEM_BY_CODE = {
     FindingCode.SPF_MISSING: "no TXT record at the domain starts with v=spf1. Token: null.",
     FindingCode.SPF_MULTIPLE: "more than one TXT record starts with v=spf1. Token: null.",
     FindingCode.SPF_SYNTAX: "the SPF record has a term SPF syntax does not allow; one claim per "
     "such term. Token: the term. A missing, duplicated or malformed SPF record has no other "
     "SPF problem.",
-    FindingCode.SPF_ALL_PASS: "the all term passes every sender: +all, or all with no "
+    FindingCode.SPF_ALL_PASS: f"{_DECIDING_ALL} passes every sender: +all, or all with no "
     "qualifier. Token: the all term.",
-    FindingCode.SPF_ALL_NEUTRAL: "the all term is ?all. Token: ?all.",
-    FindingCode.SPF_NO_ALL: "the SPF record has neither an all term nor a redirect. Token: null.",
-    FindingCode.SPF_SOFTFAIL: "the all term is ~all and DMARC does not enforce: DMARC is "
+    FindingCode.SPF_ALL_NEUTRAL: f"{_DECIDING_ALL} is ?all. Token: ?all.",
+    FindingCode.SPF_NO_ALL: "neither the SPF record nor the end of its redirect chain has an "
+    "all term. Token: null.",
+    FindingCode.SPF_SOFTFAIL: f"{_DECIDING_ALL} is ~all and DMARC does not enforce: DMARC is "
     "missing or duplicated, has no valid p tag, has p=none, or has pct below 100. Token: ~all.",
     FindingCode.SPF_PTR: "the SPF record uses the ptr mechanism; one claim per ptr term. "
     "Token: the term.",
