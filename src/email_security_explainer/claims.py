@@ -30,12 +30,15 @@ _NAME_END = r"(?![\w@-]|[.:][\w:])"
 # keeps words such as "catch-all" and "sp=" from matching "-all" and "p=". A
 # domain name ends in an alphabetic label of two or more letters, which rules
 # out "e.g." and version numbers such as "1.6".
+_IP4 = r"\d{1,3}(?:\.\d{1,3}){3}"
+# RFC 4291 section 2.2: an IPv6 address may end in an IPv4 one, as in ::ffff:192.0.2.1.
+_IP6_WITH_IP4 = rf"(?:[0-9a-f]{{0,4}}:){{2,6}}{_IP4}"
+_IP6 = r"(?:[0-9a-f]{0,4}:){1,7}(?:[0-9a-f]{1,4}|:)"
 _TOKEN = re.compile(
     r"(?<![\w-])(?:[-+~?]all\b"
     rf"|(?:include|exists|ip4|ip6):{_TERM_VALUE}"
     rf"|(?:redirect|p|sp|pct|rua|ruf|adkim|aspf)={_TERM_VALUE})"
-    r"|(?<![\w.:])(?P<address>(?:\d{1,3}(?:\.\d{1,3}){3}"
-    r"|(?:[0-9a-f]{0,4}:){1,7}(?:[0-9a-f]{1,4}|:))(?:/\d{1,3})?)"
+    rf"|(?<![\w.:])(?P<address>(?:{_IP4}|{_IP6_WITH_IP4}|{_IP6})(?:/\d{{1,3}})?)"
     rf"{_NAME_END}"
     rf"|(?<![\w.-])(?:[\w-]+\.)+[a-z]{{2,}}{_NAME_END}",
     re.IGNORECASE,

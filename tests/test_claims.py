@@ -322,7 +322,7 @@ ADDRESS_RECORDS = DnsRecords(
     domain=DomainName("example.com"),
     apex_txt=(
         "v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 ip6:2001:0DB8:0:0:0:0:0:5"
-        " include:_spf.mail.example.net -all",
+        " ip6:::ffff:192.0.2.10 include:_spf.mail.example.net -all",
     ),
     dmarc_txt=("v=DMARC1; p=reject; rua=mailto:dmarc@reports.example.net!10m",),
 )
@@ -341,6 +341,7 @@ def summary_tokens(summary: str) -> tuple[str, ...]:
         ("Mail from 2001:DB8::6 passes.", "2001:db8::6"),
         ("Mail from 2001:db8::6: it passes.", "2001:db8::6"),
         ("Mail from 2001:db8::/48 passes.", "2001:db8::/48"),
+        ("Mail from ::ffff:198.51.100.7 passes.", "::ffff:c633:6407"),
     ],
 )
 def test_bare_address_absent_from_the_records_is_unsupported(summary: str, token: str) -> None:
@@ -355,6 +356,8 @@ def test_bare_address_absent_from_the_records_is_unsupported(summary: str, token
         "2001:0DB8:0000::/32",
         "2001:db8::5",
         "2001:db8:0:0:0:0:0:5",
+        "::ffff:192.0.2.10",
+        "::ffff:c000:20a",
     ],
 )
 def test_bare_address_in_the_records_is_supported_in_any_form(address: str) -> None:
