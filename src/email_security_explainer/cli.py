@@ -75,7 +75,7 @@ def main(
         elif args.command == "case":
             output = dump_case(fetch_records(parse_domain(args.domain), lookup))
         elif args.command == "serve":
-            serve(args.port, lookup, args.model, generator_for)
+            serve(args.port, lookup, args.model, generator_for, args.open_browser)
             return EXIT_OK
         else:
             output = _audit_or_explain(args, lookup, generator_for)
@@ -133,6 +133,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_port_number,
         default=DEFAULT_PORT,
         help=f"port on 127.0.0.1 to serve the page from (default: {DEFAULT_PORT})",
+    )
+    serve_command.add_argument(
+        "--open",
+        action="store_true",
+        dest="open_browser",
+        help="open the page in the default browser once the server is listening",
     )
     _add_model_option(serve_command)
     return parser

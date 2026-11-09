@@ -5,6 +5,7 @@ import json
 import logging
 import sys
 import threading
+import webbrowser
 from dataclasses import asdict, dataclass
 from functools import partial
 from http import HTTPStatus
@@ -89,10 +90,19 @@ class _LoopbackServer(ThreadingHTTPServer):
 
 
 def serve(
-    port: int, lookup: TxtLookup, model: str, generator_for: GeneratorFactory
+    port: int,
+    lookup: TxtLookup,
+    model: str,
+    generator_for: GeneratorFactory,
+    open_browser: bool,
 ) -> None:  # pragma: no cover: blocks until Ctrl+C
     with make_server(port, lookup, model, generator_for) as server:
-        print(f"esx: checking domains at http://{HOST}:{port}/ (Ctrl+C stops it)", file=sys.stderr)
+        url = f"http://{HOST}:{port}/"
+        print(f"esx: checking domains at {url} (Ctrl+C stops it)", file=sys.stderr)
+        # The socket is already listening, so the browser's first request waits
+        # in the backlog until serve_forever accepts it.
+        if open_browser and not webbrowser.open(url):
+            print("esx: could not open a browser; open the address above", file=sys.stderr)
         # Ctrl+C is how the owner stops the server, not a failure.
         with contextlib.suppress(KeyboardInterrupt):
             server.serve_forever()

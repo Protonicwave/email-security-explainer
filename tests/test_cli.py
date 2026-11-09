@@ -466,7 +466,7 @@ def test_errors_the_console_code_page_cannot_hold_are_written_as_utf8(
     assert "例" in buffer.getvalue().decode("utf-8")
 
 
-ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None], str, GeneratorFactory]
+ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None], str, GeneratorFactory, bool]
 
 
 def fake_serve(monkeypatch: pytest.MonkeyPatch, error: OSError | None = None) -> list[ServeCall]:
@@ -477,8 +477,9 @@ def fake_serve(monkeypatch: pytest.MonkeyPatch, error: OSError | None = None) ->
         lookup: Callable[[str], tuple[str, ...] | None],
         model: str,
         generator_for: GeneratorFactory,
+        open_browser: bool,
     ) -> None:
-        calls.append((port, lookup, model, generator_for))
+        calls.append((port, lookup, model, generator_for, open_browser))
         if error is not None:
             raise error
 
@@ -493,7 +494,7 @@ def test_serve_passes_the_port_and_dns_lookup_through(monkeypatch: pytest.Monkey
         return ()
 
     assert main(["serve", "--port", "8123"], lookup) == EXIT_OK
-    assert [(port, given) for port, given, _model, _factory in calls] == [(8123, lookup)]
+    assert [(port, given) for port, given, _model, _factory, _open in calls] == [(8123, lookup)]
 
 
 def test_serve_passes_the_model_and_generator_factory_through(
@@ -505,7 +506,7 @@ def test_serve_passes_the_model_and_generator_factory_through(
         raise AssertionError("serve builds generators only when a page asks")
 
     assert main(["serve", "--model", "claude-other"], generator_for=generator_for) == EXIT_OK
-    assert [(model, factory) for _port, _lookup, model, factory in calls] == [
+    assert [(model, factory) for _port, _lookup, model, factory, _open in calls] == [
         ("claude-other", generator_for)
     ]
 
@@ -515,7 +516,18 @@ def test_serve_defaults_to_port_8000_and_the_default_model(
 ) -> None:
     calls = fake_serve(monkeypatch)
     assert main(["serve"]) == EXIT_OK
-    assert [(port, model) for port, _lookup, model, _factory in calls] == [(8000, DEFAULT_MODEL)]
+    assert [(port, model) for port, _lookup, model, _factory, _open in calls] == [
+        (8000, DEFAULT_MODEL)
+    ]
+
+
+@pytest.mark.parametrize(("argv", "opens_browser"), [([], False), (["--open"], True)])
+def test_serve_opens_the_browser_only_when_asked(
+    argv: list[str], opens_browser: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = fake_serve(monkeypatch)
+    assert main(["serve", *argv]) == EXIT_OK
+    assert [call[-1] for call in calls] == [opens_browser]
 
 
 # The last is 80 in full-width digits, which int() would accept.
