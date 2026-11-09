@@ -390,6 +390,19 @@ def test_audited_domain_and_domains_in_the_records_are_supported(domain: str) ->
     assert summary_tokens(f"Mail for {domain} is covered.") == ()
 
 
+@pytest.mark.parametrize("value", ["203.0.113.5", "198.51.100.0/24", "_spf.mail.example.org"])
+def test_value_inside_a_malformed_term_is_supported(value: str) -> None:
+    records = DnsRecords(
+        domain=DomainName("example.com"),
+        apex_txt=("v=spf1 ip:203.0.113.5 ip4=198.51.100.0/24 inlcude:_spf.mail.example.org -all",),
+        dmarc_txt=("v=DMARC1; p=reject",),
+    )
+
+    report = run_check([], f"Mail from {value} passes.", findings=[], records=records)
+
+    assert report.summary_unsupported_tokens == ()
+
+
 @pytest.mark.parametrize("domain", ["billing.example.com", "Accounts.Billing.Example.com."])
 def test_illustrative_subdomain_of_the_audited_domain_is_supported(domain: str) -> None:
     assert summary_tokens(f"Mail from a made-up name such as {domain} passes.") == ()

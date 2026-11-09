@@ -55,6 +55,9 @@ _SPACE_AROUND_EQUALS = re.compile(
 _URI_LIST = re.compile(r"(?<![\w-])(rua|ruf)\s*=\s*([^;]+)", re.IGNORECASE)
 _TRAILING_PUNCTUATION = ".:!?"
 _BARE_NAME = re.compile(r"[\w.-]+")
+# SPF terms are separated by spaces (RFC 7208 section 4.6.1), DMARC tags by
+# semicolons (RFC 7489 section 6.4).
+_TERM_SEPARATOR = re.compile(r"[\s;]+")
 
 
 class Verdict(StrEnum):
@@ -158,7 +161,10 @@ def _record_tokens(records: DnsRecords) -> frozenset[str]:
         *(text for txt in records.spf_by_domain.values() for text in spf.select_records(txt)),
     ]
     record_tokens = {token for text in texts for token in _tokens(_split_uri_lists(text))}
-    values = {value for token in record_tokens for value in _tokens(_TOKEN_NAME.sub("", token))}
+    # Every term's value, not only a record token's: a malformed term such as
+    # ip:203.0.113.5 still puts its address in the record for prose to quote.
+    terms = (term for text in texts for term in _TERM_SEPARATOR.split(_split_uri_lists(text)))
+    values = {value for term in terms for value in _tokens(_TOKEN_NAME.sub("", term))}
     return frozenset({*record_tokens, *values, records.domain, f"_dmarc.{records.domain}"})
 
 
