@@ -101,20 +101,14 @@ which is 42 runs and 58 findings per condition.
 The seven runs of the second repeat that finished explained every finding with
 no errors; they are in the results file but not in the table.
 
-The one rejected claim was the check's mistake, not the model's. For
-`typos-in-records.example` the model explained the malformed term
-`ip:203.0.113.5` and then named the address 203.0.113.5 on its own. The address
-is in the record, but only inside that term, and the check did not yet read
-values inside malformed terms, so it rejected a correct claim and its finding
-counted as missed. The repair round passed, and the check now reads those
-values. An earlier attempt on the same corpus, stopped by the same limit, had
-seven more rejections of this kind: made-up subdomains such as
-`billing.<domain>` used to illustrate `sp=none`, and "the p= tag" read as the
-value `p=tag`. In that attempt the `raw_records` model also reported two include
-targets as unusable, because the request showed no record for them; the fetch
-had stopped at the lookup limit before reaching them, and the request now says
-so. On this corpus, the evaluation found faults in the claim check and in the
-request sent to the model, rather than in the model.
+The runs were scored by the claim check at commit 2d31bbb. The one rejected
+claim was the check's mistake, not the model's. For `typos-in-records.example`
+the model explained the malformed term `ip:203.0.113.5` and named the address
+203.0.113.5 on its own. The address is in the record, but only inside that
+term, which that version of the check did not read, so it rejected a correct
+claim and the finding counted as missed; commit f44a103 makes the check read
+values inside malformed terms. The repair round passed, so the reader of the
+checked explanation saw every finding.
 
 The larger corpus still does not separate the conditions. Given the auditor's
 rules in words, the `raw_records` model found all 58 findings and invented none,
