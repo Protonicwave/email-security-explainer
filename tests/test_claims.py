@@ -1,3 +1,5 @@
+import ipaddress
+
 import pytest
 
 from email_security_explainer.audit import DnsRecords, audit
@@ -341,7 +343,9 @@ def summary_tokens(summary: str) -> tuple[str, ...]:
         ("Mail from 2001:DB8::6 passes.", "2001:db8::6"),
         ("Mail from 2001:db8::6: it passes.", "2001:db8::6"),
         ("Mail from 2001:db8::/48 passes.", "2001:db8::/48"),
-        ("Mail from ::ffff:198.51.100.7 passes.", "::ffff:c633:6407"),
+        # Python 3.12 releases differ in how they print this form, so the
+        # expected token comes from ipaddress, as the check's does.
+        ("Mail from ::ffff:198.51.100.7 passes.", str(ipaddress.ip_address("::ffff:198.51.100.7"))),
     ],
 )
 def test_bare_address_absent_from_the_records_is_unsupported(summary: str, token: str) -> None:
