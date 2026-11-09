@@ -90,8 +90,16 @@ http://127.0.0.1:8000:
 
 ```sh
 uv run esx serve
-uv run esx serve --port 8080 --model claude-opus-5-5
+uv run esx serve --port 8080 --model claude-opus-5-5 --open
 ```
+
+`--open` opens the page in the default browser once the server is listening.
+
+On Windows, double-click `serve.bat` instead. It installs uv 0.12.1 into
+`%USERPROFILE%\.local\bin` if uv is missing, lets uv fetch Python 3.12 and the
+dependencies on the first run, and starts `esx serve --open`. It passes its
+arguments on, so `serve.bat --port 8080` works, and it says so when
+`ANTHROPIC_API_KEY` is not set.
 
 The page shows the verdict, the SPF and DMARC records with each finding marked
 on the token it rests on, and then Claude's checked explanation and fix for
