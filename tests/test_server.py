@@ -141,6 +141,12 @@ def test_refuses_a_port_another_server_is_listening_on(port: int, claude: FakeCl
         make_server(port, lookup, MODEL, claude.generator_for).server_close()
 
 
+def test_serves_the_page_with_a_query_string(port: int) -> None:
+    status, _headers, body = request(port, "GET", "/?utm_source=mail")
+    assert status == 200
+    assert b"<!doctype html>" in body
+
+
 def test_answers_404_for_an_unknown_path(port: int) -> None:
     assert request(port, "GET", "/etc/passwd")[0] == 404
     assert request(port, "POST", "/api/other", b"{}", {"Content-Length": "2"})[0] == 404

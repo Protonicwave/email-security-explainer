@@ -12,6 +12,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from typing import Any
+from urllib.parse import urlsplit
 
 import anthropic
 
@@ -127,9 +128,11 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self._refuse_foreign_request():
             return
-        page_file = self._page_files.get(self.path)
+        # A link to the page may carry a query string, which the page ignores.
+        path = urlsplit(self.path).path
+        page_file = self._page_files.get(path)
         if page_file is None:
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no page at {self.path}"})
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no page at {path}"})
             return
         self._send(HTTPStatus.OK, *page_file)
 
