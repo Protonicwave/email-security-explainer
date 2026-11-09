@@ -44,8 +44,12 @@ _TOKEN = re.compile(
 # include: or the URI of rua=.
 _TOKEN_NAME = re.compile(r"^[^:=]*[:=]")
 # RFC 7489 section 6.4 allows whitespace around "=" in a DMARC tag, and prose
-# that writes p = reject still quotes a record value.
-_SPACE_AROUND_EQUALS = re.compile(r"\s*=\s*")
+# that writes p = reject still quotes a record value. Prose also names a tag
+# as "the p= tag", so a space after "=" joins only a word shaped like a value:
+# a policy or alignment keyword, or text with a digit or an inner colon or dot.
+_SPACE_AROUND_EQUALS = re.compile(
+    r"\s*=(?:\s+(?=(?:none|quarantine|reject|r|s)\b|\S*?(?:\d|[:.]\w)))?", re.IGNORECASE
+)
 # RFC 7489 section 6.2: rua and ruf hold comma-separated URIs, and prose may
 # quote any one of them.
 _URI_LIST = re.compile(r"(?<![\w-])(rua|ruf)\s*=\s*([^;]+)", re.IGNORECASE)

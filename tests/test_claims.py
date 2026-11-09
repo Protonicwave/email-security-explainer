@@ -271,6 +271,31 @@ def test_spaces_around_equals_do_not_hide_a_token() -> None:
     assert report.claim_checks[0].unsupported_tokens == ("p=reject",)
 
 
+@pytest.mark.parametrize(
+    ("summary", "token"),
+    [
+        ("The record says p= Quarantine today.", "p=quarantine"),
+        ("The record says pct= 50 today.", "pct=50"),
+        ("The record says adkim= s today.", "adkim=s"),
+        ("Reports go to rua= mailto:d@evil.example today.", "rua=mailto:d@evil.example"),
+    ],
+)
+def test_a_value_after_a_spaced_equals_is_read_with_its_tag(summary: str, token: str) -> None:
+    assert summary_tokens(summary) == (token,)
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "The record has no policy (the p= tag).",
+        "Set the sp= setting to match.",
+        "The rua= tag: it lists where reports go.",
+    ],
+)
+def test_a_word_after_a_spaced_equals_is_not_read_as_a_value(summary: str) -> None:
+    assert summary_tokens(summary) == ()
+
+
 def test_curly_quotes_around_a_token_are_not_part_of_it() -> None:
     explanation = "Your record says \u2018p=none\u2019 and \u201c~all\u201d."
 
