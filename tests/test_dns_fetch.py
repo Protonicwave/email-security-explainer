@@ -4,7 +4,12 @@ import dns.exception
 import dns.resolver
 import pytest
 
-from email_security_explainer.dns_fetch import DnsLookupError, fetch_records, lookup_txt
+from email_security_explainer.dns_fetch import (
+    DnsLookupError,
+    DomainNotFoundError,
+    fetch_records,
+    lookup_txt,
+)
 from email_security_explainer.domain import DomainName
 
 DOMAIN = DomainName("example.com")
@@ -36,8 +41,8 @@ def test_fetches_apex_and_dmarc() -> None:
     assert records.spf_by_domain == {}
 
 
-def test_missing_domain_raises() -> None:
-    with pytest.raises(DnsLookupError, match=r"example\.com does not exist"):
+def test_missing_domain_raises_domain_not_found() -> None:
+    with pytest.raises(DomainNotFoundError, match=r"example\.com does not exist"):
         fetch_records(DOMAIN, FakeDns({"example.com": None}))
 
 
@@ -48,8 +53,9 @@ def test_missing_dmarc_name_means_no_record() -> None:
 
 def test_dns_failure_propagates() -> None:
     lookup = FakeDns({"_dmarc.example.com": DnsLookupError("timed out")})
-    with pytest.raises(DnsLookupError, match="timed out"):
+    with pytest.raises(DnsLookupError, match="timed out") as raised:
         fetch_records(DOMAIN, lookup)
+    assert not isinstance(raised.value, DomainNotFoundError)
 
 
 def test_follows_include_chain() -> None:
