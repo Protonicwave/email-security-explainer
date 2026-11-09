@@ -3,14 +3,17 @@
 import contextlib
 import json
 import logging
+import socket
 import sys
 import threading
 import webbrowser
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
+from socketserver import BaseRequestHandler
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -34,6 +37,8 @@ from email_security_explainer.web import audit_view, explain_view, ordered_findi
 
 HOST = "127.0.0.1"
 MAX_BODY_BYTES = 1024
+# One thread serves each request, so this also bounds the threads.
+MAX_OPEN_REQUESTS = 32
 SOCKET_TIMEOUT_SECONDS = 10.0
 # The fonts are the only outside resource; every untrusted string reaches the
 # page as text, so no inline script or style is needed either.
@@ -49,6 +54,9 @@ _PAGE_FILES = {
 }
 
 logger = logging.getLogger(__name__)
+
+# What socketserver passes as a request: a TCP connection, or a datagram and its socket.
+_Request = socket.socket | tuple[bytes, socket.socket]
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +94,24 @@ class _LoopbackServer(ThreadingHTTPServer):
     # listening, so a taken port would go unreported. Elsewhere it only allows
     # rebinding over connections a stopped server left in TIME_WAIT.
     allow_reuse_address = sys.platform != "win32"
+
+    def __init__(
+        self, address: tuple[str, int], handler: Callable[..., BaseRequestHandler]
+    ) -> None:
+        super().__init__(address, handler)
+        self._request_slots = threading.BoundedSemaphore(MAX_OPEN_REQUESTS)
+
+    def process_request(self, request: _Request, client_address: Any) -> None:
+        if not self._request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request: _Request, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
 
 
 def serve(

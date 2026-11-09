@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import http.client
 import json
@@ -16,7 +17,7 @@ from email_security_explainer.dns_fetch import DnsLookupError
 from email_security_explainer.explain import SYSTEM_PROMPT, ExplanationError, Generate
 from email_security_explainer.findings import FindingCode
 from email_security_explainer.schema import Claim, Explanation
-from email_security_explainer.server import make_server
+from email_security_explainer.server import MAX_OPEN_REQUESTS, make_server
 
 STATIC = Path("src/email_security_explainer/static")
 PAGE_ASSET_BUDGET_BYTES = 75 * 1024
@@ -87,6 +88,12 @@ def port(claude: FakeClaude) -> Iterator[int]:
         server.server_close()
 
 
+def wait_for_open_requests() -> None:
+    for thread in threading.enumerate():
+        if "process_request_thread" in thread.name:
+            thread.join(timeout=5)
+
+
 def request(
     port: int,
     method: str,
@@ -145,6 +152,22 @@ def test_serves_the_page_with_a_query_string(port: int) -> None:
     status, _headers, body = request(port, "GET", "/?utm_source=mail")
     assert status == 200
     assert b"<!doctype html>" in body
+
+
+def test_closes_connections_beyond_the_limit_until_one_frees(port: int) -> None:
+    with contextlib.ExitStack() as stack:
+        for _ in range(MAX_OPEN_REQUESTS):
+            stack.enter_context(socket.create_connection(("127.0.0.1", port), timeout=5))
+        # A closed connection shows as an empty read or, on Windows, a reset or
+        # an abort, while sending or reading.
+        with (
+            socket.create_connection(("127.0.0.1", port), timeout=5) as extra,
+            contextlib.suppress(ConnectionError),
+        ):
+            extra.sendall(b"GET / HTTP/1.0\r\nHost: 127.0.0.1:%d\r\n\r\n" % port)
+            assert extra.recv(1) == b""
+    wait_for_open_requests()
+    assert request(port, "GET", "/")[0] == 200
 
 
 def test_answers_404_for_an_unknown_path(port: int) -> None:
@@ -322,9 +345,7 @@ def test_a_page_that_leaves_mid_explanation_is_not_reported_as_a_failure(
         page.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
     claude.release.set()
     # The handler frees the lock before it answers, so wait for it to finish.
-    for thread in threading.enumerate():
-        if "process_request_thread" in thread.name:
-            thread.join(timeout=5)
+    wait_for_open_requests()
     assert [record for record in caplog.records if record.levelno >= logging.ERROR] == []
     assert "Traceback" not in capsys.readouterr().err
     assert explain(port, "example.com")[0] == 200
