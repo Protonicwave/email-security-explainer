@@ -299,7 +299,10 @@ def _deciding_record(
     result is the record's result.
     """
     record = parsed
-    for _ in range(MAX_SPF_LOOKUPS + 1):
+    # One pass per record, so the limit's redirects reach limit + 1 records. The
+    # tests pin the bound; 10 | 1 and 10 ^ 1 also make 11, so those mutants are
+    # equivalent.
+    for _ in range(MAX_SPF_LOOKUPS + 1):  # pragma: no mutate
         redirect = next((term for term in record.terms if term.name == "redirect"), None)
         if record.has_all or redirect is None:
             return record

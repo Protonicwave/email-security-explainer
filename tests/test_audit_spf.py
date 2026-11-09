@@ -5,7 +5,7 @@ import pytest
 from email_security_explainer.audit import DnsRecords, audit
 from email_security_explainer.domain import DomainName
 from email_security_explainer.findings import Finding, FindingCode, RecordKind, Severity
-from email_security_explainer.spf import walk_lookups
+from email_security_explainer.spf import lookup_targets, walk_lookups
 
 ENFORCING_DMARC = "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
 LONGEST_LABEL = "a" * 63
@@ -261,6 +261,31 @@ def test_redirect_to_a_record_without_all_has_no_all() -> None:
 
 def test_redirect_to_a_macro_target_reports_no_all_finding() -> None:
     assert spf_findings(("v=spf1 redirect=%{d}._spf.example.com",)) == []
+
+
+def test_redirect_left_unfetched_past_the_lookup_limit_reports_only_the_limit() -> None:
+    terms = " ".join(f"a:h{index}.example.com" for index in range(10))
+    findings = spf_findings((f"v=spf1 {terms} redirect=gone.example.com",))
+    assert findings == [Finding(FindingCode.SPF_LOOKUP_LIMIT)]
+
+
+@pytest.mark.parametrize(
+    ("txt_records", "targets"),
+    [
+        (
+            ("v=spf1 a include:A.example.com. redirect=b.example.com",),
+            ["a.example.com", "b.example.com"],
+        ),
+        (("v=spf1 include:%{i}.example.com -all",), []),
+        (("v=spf1 -all redirect=b.example.com",), []),
+        (("verification=abc",), []),
+        (("v=spf1 include:a.example.com -all", "v=spf1 -all"), []),
+    ],
+)
+def test_lookup_targets_lists_the_targets_a_record_sends_lookups_to(
+    txt_records: tuple[str, ...], targets: list[str]
+) -> None:
+    assert lookup_targets(txt_records) == targets
 
 
 def redirect_chain(length: int, final: str) -> dict[str, tuple[str, ...]]:
