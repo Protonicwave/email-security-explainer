@@ -5,9 +5,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import anthropic
 import pytest
 
 from email_security_explainer.dns_fetch import DnsLookupError
+from email_security_explainer.explain import SYSTEM_PROMPT, ExplanationError, Generate
+from email_security_explainer.findings import FindingCode
+from email_security_explainer.schema import Claim, Explanation
 from email_security_explainer.server import make_server
 
 STATIC = Path("src/email_security_explainer/static")
@@ -16,7 +20,16 @@ TABLE: dict[str, tuple[str, ...] | None] = {
     "example.com": ("v=spf1 ptr -all",),
     "_dmarc.example.com": ("v=DMARC1; p=reject; rua=mailto:d@example.com",),
     "missing.example": None,
+    "clean.example": ("v=spf1 -all",),
+    "_dmarc.clean.example": ("v=DMARC1; p=reject; rua=mailto:d@clean.example",),
 }
+MODEL = "claude-test"
+PTR_CLAIM = Claim(
+    finding_code=FindingCode.SPF_PTR,
+    quoted_value="ptr",
+    explanation="The ptr term is slow and receivers may skip it.",
+    fix="Remove ptr.",
+)
 
 
 def lookup(name: str) -> tuple[str, ...] | None:
@@ -27,9 +40,38 @@ def lookup(name: str) -> tuple[str, ...] | None:
     return TABLE.get(name, ())
 
 
+class FakeClaude:
+    """Explains the ptr finding, or fails for domains named to fail. While
+    `release` is unset, each request waits on it after setting `entered`."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.release.set()
+        self.prompts: list[tuple[str, str]] = []
+
+    def generator_for(self, model: str, system_prompt: str) -> Generate:
+        self.prompts.append((model, system_prompt))
+        return self.generate
+
+    def generate(self, request: str) -> Explanation:
+        self.entered.set()
+        assert self.release.wait(timeout=5)
+        if "declines.example" in request:
+            raise ExplanationError("claude-test declined to explain (category: cyber)")
+        if "nokey.example" in request:
+            raise anthropic.AnthropicError("the api_key client option must be set")
+        return Explanation(summary="Mostly guarded.", claims=[PTR_CLAIM])
+
+
 @pytest.fixture
-def port() -> Iterator[int]:
-    server = make_server(0, lookup)
+def claude() -> FakeClaude:
+    return FakeClaude()
+
+
+@pytest.fixture
+def port(claude: FakeClaude) -> Iterator[int]:
+    server = make_server(0, lookup, MODEL, claude.generator_for)
     # A short poll interval keeps shutdown, and so each test, quick.
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
     thread.start()
@@ -57,11 +99,21 @@ def request(
         connection.close()
 
 
-def audit(port: int, domain: Any, headers: dict[str, str] | None = None) -> tuple[int, Any]:
+def post(
+    port: int, path: str, domain: Any, headers: dict[str, str] | None = None
+) -> tuple[int, Any]:
     status, _headers, body = request(
-        port, "POST", "/api/audit", json.dumps({"domain": domain}).encode(), headers
+        port, "POST", path, json.dumps({"domain": domain}).encode(), headers
     )
     return status, json.loads(body)
+
+
+def audit(port: int, domain: Any, headers: dict[str, str] | None = None) -> tuple[int, Any]:
+    return post(port, "/api/audit", domain, headers)
+
+
+def explain(port: int, domain: Any) -> tuple[int, Any]:
+    return post(port, "/api/explain", domain)
 
 
 @pytest.mark.parametrize(
@@ -161,3 +213,77 @@ def test_page_styles_and_script_are_under_budget() -> None:
     size = sum((STATIC / name).stat().st_size for name in ("app.css", "app.js"))
     print(f"app.css + app.js: {size / 1024:.1f} KiB (budget 75 KiB)")
     assert size < PAGE_ASSET_BUDGET_BYTES
+
+
+def test_explains_a_domain_with_the_model_it_was_given(port: int, claude: FakeClaude) -> None:
+    status, payload = explain(port, "example.com")
+    assert status == 200
+    assert (payload["domain"], payload["model"], payload["summary"]) == (
+        "example.com",
+        MODEL,
+        "Mostly guarded.",
+    )
+    assert payload["findings"] == [
+        {
+            "number": 1,
+            "code": "SPF_PTR",
+            "evidence": "ptr",
+            "explanation": PTR_CLAIM.explanation,
+            "fix": "Remove ptr.",
+            "unsupported_tokens": [],
+        }
+    ]
+    assert claude.prompts == [(MODEL, SYSTEM_PROMPT)]
+
+
+@pytest.mark.parametrize(
+    ("domain", "reason"),
+    [("declines.example", "declined to explain"), ("nokey.example", "api_key")],
+)
+def test_reports_a_model_failure_with_502(port: int, domain: str, reason: str) -> None:
+    status, payload = explain(port, domain)
+    assert status == 502
+    assert reason in payload["error"]
+
+
+def test_refuses_to_explain_a_domain_with_no_findings_with_409(
+    port: int, claude: FakeClaude
+) -> None:
+    assert explain(port, "clean.example")[0] == 409
+    assert claude.prompts == []
+
+
+@pytest.mark.parametrize(
+    ("domain", "status"),
+    [("not a domain", 400), ("missing.example", 404), ("timeout.example", 502)],
+)
+def test_explain_reports_domain_and_dns_errors_as_the_audit_does(
+    port: int, claude: FakeClaude, domain: str, status: int
+) -> None:
+    assert explain(port, domain)[0] == status
+    assert claude.prompts == []
+
+
+def test_refuses_a_second_explanation_while_one_runs_with_429(
+    port: int, claude: FakeClaude
+) -> None:
+    claude.release.clear()
+    first: list[tuple[int, Any]] = []
+    thread = threading.Thread(target=lambda: first.append(explain(port, "example.com")))
+    thread.start()
+    try:
+        assert claude.entered.wait(timeout=5)
+        status, payload = explain(port, "example.com")
+        assert status == 429
+        assert "already" in payload["error"]
+        assert audit(port, "example.com")[0] == 200
+    finally:
+        claude.release.set()
+        thread.join()
+    assert first[0][0] == 200
+    assert explain(port, "example.com")[0] == 200
+
+
+def test_explain_reports_an_unexpected_failure_with_500_and_frees_the_lock(port: int) -> None:
+    assert explain(port, "broken.example")[0] == 500
+    assert explain(port, "example.com")[0] == 200

@@ -4,13 +4,17 @@ import contextlib
 import json
 import logging
 import sys
-from dataclasses import asdict
+import threading
+from dataclasses import asdict, dataclass
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from typing import Any
 
+import anthropic
+
+from email_security_explainer.audit import DnsRecords
 from email_security_explainer.dns_fetch import (
     DnsLookupError,
     DomainNotFoundError,
@@ -18,7 +22,13 @@ from email_security_explainer.dns_fetch import (
     fetch_records,
 )
 from email_security_explainer.domain import parse_domain
-from email_security_explainer.web import audit_view
+from email_security_explainer.explain import (
+    SYSTEM_PROMPT,
+    ExplanationError,
+    GeneratorFactory,
+    explain,
+)
+from email_security_explainer.web import audit_view, explain_view, ordered_findings
 
 HOST = "127.0.0.1"
 MAX_BODY_BYTES = 1024
@@ -41,7 +51,20 @@ logger = logging.getLogger(__name__)
 PageFiles = dict[str, tuple[bytes, str]]
 
 
-def make_server(port: int, lookup: TxtLookup) -> ThreadingHTTPServer:
+@dataclass(frozen=True, slots=True)
+class _Explainer:
+    """What an explanation needs. Holding `lock` while the model runs allows one
+    explanation at a time, which bounds the API spend of a double click or a
+    second tab."""
+
+    model: str
+    generator_for: GeneratorFactory
+    lock: threading.Lock
+
+
+def make_server(
+    port: int, lookup: TxtLookup, model: str, generator_for: GeneratorFactory
+) -> ThreadingHTTPServer:
     """Bind to `port` on the loopback address. Raises OSError when the port is
     taken; port 0 picks a free one."""
     static = resources.files(__package__) / "static"
@@ -49,12 +72,19 @@ def make_server(port: int, lookup: TxtLookup) -> ThreadingHTTPServer:
         path: ((static / name).read_bytes(), content_type)
         for path, (name, content_type) in _PAGE_FILES.items()
     }
-    handler = partial(_PageRequestHandler, lookup=lookup, page_files=page_files)
+    handler = partial(
+        _PageRequestHandler,
+        lookup=lookup,
+        page_files=page_files,
+        explainer=_Explainer(model, generator_for, threading.Lock()),
+    )
     return ThreadingHTTPServer((HOST, port), handler)
 
 
-def serve(port: int, lookup: TxtLookup) -> None:  # pragma: no cover: blocks until Ctrl+C
-    with make_server(port, lookup) as server:
+def serve(
+    port: int, lookup: TxtLookup, model: str, generator_for: GeneratorFactory
+) -> None:  # pragma: no cover: blocks until Ctrl+C
+    with make_server(port, lookup, model, generator_for) as server:
         print(f"esx: checking domains at http://{HOST}:{port}/ (Ctrl+C stops it)", file=sys.stderr)
         # Ctrl+C is how the owner stops the server, not a failure.
         with contextlib.suppress(KeyboardInterrupt):
@@ -66,9 +96,17 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
     timeout = SOCKET_TIMEOUT_SECONDS
     server_version = "esx"
 
-    def __init__(self, *args: Any, lookup: TxtLookup, page_files: PageFiles, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        lookup: TxtLookup,
+        page_files: PageFiles,
+        explainer: _Explainer,
+        **kwargs: Any,
+    ) -> None:
         self._lookup = lookup
         self._page_files = page_files
+        self._explainer = explainer
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:
@@ -83,38 +121,75 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._is_from_this_page():
             return
-        if self.path != "/api/audit":
+        if self.path not in {"/api/audit", "/api/explain"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no API at {self.path}"})
             return
         raw_domain = self._read_domain()
         if raw_domain is None:
             return
         try:
-            self._audit(raw_domain)
+            if self.path == "/api/audit":
+                self._audit(raw_domain)
+            else:
+                self._explain(raw_domain)
         except Exception:
             # The process boundary for one request: the page gets an answer and
             # the terminal gets the traceback.
-            logger.exception("audit of %r failed", raw_domain)
+            logger.exception("%s for %r failed", self.path, raw_domain)
             self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"error": "esx failed while checking this domain; the terminal shows why"},
             )
 
     def _audit(self, raw_domain: str) -> None:
+        records = self._fetch(raw_domain)
+        if records is not None:
+            self._send_json(HTTPStatus.OK, asdict(audit_view(records)))
+
+    def _explain(self, raw_domain: str) -> None:
+        # The records are fetched and audited again rather than taken from the
+        # page, so the claim check holds the explanation to what DNS says.
+        explainer = self._explainer
+        if not explainer.lock.acquire(blocking=False):
+            self._send_json(
+                HTTPStatus.TOO_MANY_REQUESTS, {"error": "an explanation is already being written"}
+            )
+            return
+        try:
+            records = self._fetch(raw_domain)
+            if records is None:
+                return
+            findings = ordered_findings(records)
+            if not findings:
+                self._send_json(
+                    HTTPStatus.CONFLICT, {"error": f"the audit of {records.domain} found nothing"}
+                )
+                return
+            try:
+                generate = explainer.generator_for(explainer.model, SYSTEM_PROMPT)
+                result = explain(findings, records, generate)
+            except (ExplanationError, anthropic.AnthropicError) as err:
+                self._send_json(HTTPStatus.BAD_GATEWAY, {"error": str(err)})
+                return
+            view = explain_view(records.domain, explainer.model, findings, result)
+            self._send_json(HTTPStatus.OK, asdict(view))
+        finally:
+            explainer.lock.release()
+
+    def _fetch(self, raw_domain: str) -> DnsRecords | None:
+        """The domain's records, or None once the error has been sent."""
         try:
             domain = parse_domain(raw_domain)
         except ValueError as err:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(err)})
-            return
+            return None
         try:
-            records = fetch_records(domain, self._lookup)
+            return fetch_records(domain, self._lookup)
         except DomainNotFoundError as err:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": str(err)})
-            return
         except DnsLookupError as err:
             self._send_json(HTTPStatus.BAD_GATEWAY, {"error": str(err)})
-            return
-        self._send_json(HTTPStatus.OK, asdict(audit_view(records)))
+        return None
 
     def _is_from_this_page(self) -> bool:
         """Refuse a request another site sent through the browser, including

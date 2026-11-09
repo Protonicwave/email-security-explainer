@@ -19,6 +19,7 @@ from email_security_explainer.explain import (
     SYSTEM_PROMPT,
     ExplanationError,
     Generate,
+    GeneratorFactory,
 )
 from email_security_explainer.findings import FindingCode
 from email_security_explainer.schema import Claim, Explanation
@@ -465,14 +466,19 @@ def test_errors_the_console_code_page_cannot_hold_are_written_as_utf8(
     assert "例" in buffer.getvalue().decode("utf-8")
 
 
-ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None]]
+ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None], str, GeneratorFactory]
 
 
 def fake_serve(monkeypatch: pytest.MonkeyPatch, error: OSError | None = None) -> list[ServeCall]:
     calls: list[ServeCall] = []
 
-    def serve(port: int, lookup: Callable[[str], tuple[str, ...] | None]) -> None:
-        calls.append((port, lookup))
+    def serve(
+        port: int,
+        lookup: Callable[[str], tuple[str, ...] | None],
+        model: str,
+        generator_for: GeneratorFactory,
+    ) -> None:
+        calls.append((port, lookup, model, generator_for))
         if error is not None:
             raise error
 
@@ -487,13 +493,29 @@ def test_serve_passes_the_port_and_dns_lookup_through(monkeypatch: pytest.Monkey
         return ()
 
     assert main(["serve", "--port", "8123"], lookup) == EXIT_OK
-    assert calls == [(8123, lookup)]
+    assert [(port, given) for port, given, _model, _factory in calls] == [(8123, lookup)]
 
 
-def test_serve_defaults_to_port_8000(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_serve_passes_the_model_and_generator_factory_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = fake_serve(monkeypatch)
+
+    def generator_for(model: str, system_prompt: str) -> Generate:
+        raise AssertionError("serve builds generators only when a page asks")
+
+    assert main(["serve", "--model", "claude-other"], generator_for=generator_for) == EXIT_OK
+    assert [(model, factory) for _port, _lookup, model, factory in calls] == [
+        ("claude-other", generator_for)
+    ]
+
+
+def test_serve_defaults_to_port_8000_and_the_default_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = fake_serve(monkeypatch)
     assert main(["serve"]) == EXIT_OK
-    assert [port for port, _lookup in calls] == [8000]
+    assert [(port, model) for port, _lookup, model, _factory in calls] == [(8000, DEFAULT_MODEL)]
 
 
 # The last is 80 in full-width digits, which int() would accept.

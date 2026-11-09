@@ -4,10 +4,21 @@
 // a text node, never as markup, so a TXT record cannot inject anything.
 
 const REQUEST_TIMEOUT_MS = 90000;
+// The server allows each model call two minutes and a repair round doubles
+// the calls, so a slow answer can take several minutes.
+const EXPLAIN_TIMEOUT_MS = 300000;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEVERITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
 const RECORD_LABELS = { spf: "SPF", dmarc: "DMARC" };
-const VIEWS = ["intro", "checking", "stopped", "verdict", "records", "findings"];
+const VIEWS = ["intro", "checking", "stopped", "verdict", "records", "findings", "method"];
+const EXPLAIN_PARTS = ["steps", "summary", "explain-stopped"];
+const PASSED_PATH = "M3 8.5 6.5 12 13 4";
+const DROPPED_PATH = "M4 8h8";
+
+// Each check takes the next number, and a reply for an earlier check is dropped,
+// so a slow explanation cannot land on another domain's audit.
+let checkNumber = 0;
+let explainController = null;
 
 const form = document.getElementById("check-form");
 const input = document.getElementById("domain");
@@ -35,11 +46,38 @@ function icon(pathData) {
   return svg;
 }
 
-const tick = () => {
-  const svg = icon("M3 8.5 6.5 12 13 4");
+const tick = (pathData = PASSED_PATH) => {
+  const svg = icon(pathData);
   svg.classList.add("tick");
   return svg;
 };
+
+const plural = (count, one, many) => (count === 1 ? one : many);
+
+// Tokens as bold text, separated by commas.
+function strongList(tokens) {
+  return tokens.flatMap((token, index) => (index ? [", ", element("strong", "", token)] : [element("strong", "", token)]));
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Text with each whole occurrence of `token` set as code: ptr is marked, but not
+// the ptr inside ptr:mail.example.
+function withCode(tag, className, text, token) {
+  const node = element(tag, className);
+  if (token === null) {
+    node.textContent = text;
+    return node;
+  }
+  const parts = text.split(new RegExp(`(?<![\\w:.=-])${escapeRegExp(token)}(?![\\w:=-])`));
+  parts.forEach((part, index) => {
+    if (index) node.append(element("code", "", token));
+    if (part) node.append(part);
+  });
+  return node;
+}
 
 function show(...visible) {
   for (const id of VIEWS) document.getElementById(id).hidden = !visible.includes(id);
@@ -177,7 +215,7 @@ function renderFinding(finding) {
   item.id = `finding-${finding.number}`;
   item.dataset.sev = finding.severity;
   item.dataset.finding = String(finding.number);
-  const body = element("div");
+  const body = element("div", "finding-body");
   const meta = element("p", "finding-meta");
   meta.append(
     element("span", "severity", SEVERITY_LABELS[finding.severity]),
@@ -185,7 +223,7 @@ function renderFinding(finding) {
   );
   body.append(meta, element("h3", "", finding.title));
   if (finding.evidence !== null) {
-    const quote = element("p");
+    const quote = element("p", "rests-on");
     quote.append("Rests on ", element("code", "", finding.evidence), ` in your ${RECORD_LABELS[finding.record]} record.`);
     body.append(quote);
   }
@@ -218,7 +256,196 @@ function linkFindings(root) {
   }
 }
 
-function renderAudit(view) {
+function showExplainPart(visible) {
+  for (const id of EXPLAIN_PARTS) document.getElementById(id).hidden = id !== visible;
+}
+
+function step(text, status, detail = "") {
+  const item = element("li", "step");
+  item.dataset.status = status;
+  const mark = element("span", "step-mark");
+  mark.append(status === "done" ? tick() : element("span", "step-dot"));
+  item.append(mark, element("span", "", text), element("span", "step-detail", detail));
+  return item;
+}
+
+function showExplaining(view) {
+  const count = view.findings.length;
+  const lookups = view.spf_lookup_count > view.max_spf_lookups
+    ? `over ${view.max_spf_lookups} lookups`
+    : `${view.spf_lookup_count} of ${view.max_spf_lookups} lookups`;
+  document.getElementById("steps").replaceChildren(
+    step("Fetched records and followed SPF includes", "done", lookups),
+    step("Audited against RFC 7208 and 7489", "done", `${count} ${plural(count, "finding", "findings")}`),
+    step("Asking Claude to explain them", "active"),
+    step("Checking each claim against your records", "waiting"),
+  );
+  showExplainPart("steps");
+}
+
+function showExplainStopped(title, reason, retryLabel, retry) {
+  document.getElementById("explain-stopped-title").textContent = title;
+  document.getElementById("explain-stopped-reason").textContent = reason;
+  const button = document.getElementById("explain-retry");
+  button.textContent = retryLabel;
+  button.onclick = retry;
+  showExplainPart("explain-stopped");
+}
+
+function showRecordsChanged(domain) {
+  showExplainStopped(
+    "Your records changed after the audit.",
+    "The explanations were written for findings other than the ones shown, so they are left out. Check the domain again to audit the records as they are now.",
+    "Check domain again",
+    () => check(domain),
+  );
+}
+
+function matchesAudit(explained, audited) {
+  return explained.domain === audited.domain
+    && explained.findings.length === audited.findings.length
+    && explained.findings.every((entry, index) => entry.code === audited.findings[index].code
+      && entry.evidence === audited.findings[index].evidence);
+}
+
+function renderSummary(view) {
+  const summary = document.getElementById("summary");
+  if (view.summary === null) {
+    const tokens = view.summary_unsupported_tokens;
+    summary.replaceChildren(
+      element("span", "summary-by", "Claude’s summary was removed"),
+      "It quoted ", ...strongList(tokens), `, which ${plural(tokens.length, "is", "are")} not in your records.`,
+    );
+  } else {
+    summary.replaceChildren(element("span", "summary-by", "Claude’s summary"), view.summary);
+  }
+  showExplainPart(view.summary === "" ? null : "summary");
+}
+
+function checkedLine(isPassed, nodes) {
+  const line = element("p", isPassed ? "checked" : "checked is-dropped");
+  const text = element("span");
+  text.append(...nodes);
+  line.append(tick(isPassed ? PASSED_PATH : DROPPED_PATH), text);
+  return line;
+}
+
+function renderExplained(entry, body) {
+  const fix = withCode("p", "fix", entry.fix, entry.evidence);
+  fix.prepend(element("span", "fix-label", "To fix"));
+  body.append(withCode("p", "", entry.explanation, entry.evidence), fix);
+  return checkedLine(true, entry.evidence === null
+    ? ["Checked. Names this finding and quotes nothing that is not in your records."]
+    : ["Checked. Quotes ", element("strong", "", entry.evidence), ", the value this finding rests on, and nothing that is not in your records."]);
+}
+
+function renderRemoved(entry, body) {
+  const tokens = entry.unsupported_tokens;
+  const isAre = plural(tokens.length, "is", "are");
+  const withheld = element("div", "withheld");
+  withheld.append(element("span", "withheld-title", "Explanation removed"));
+  if (tokens.length) {
+    withheld.append("Claude’s explanation named ", ...strongList(tokens), `, which ${isAre} not in your records. Claude was sent its answer back once with the problems listed, and this explanation still failed the check, so it was removed.`);
+  } else {
+    withheld.append("Claude gave no explanation of this finding that passed the claim check, even after it was sent its answer back once with the problems listed.");
+  }
+  withheld.append(" The finding stands: it comes from the auditor, not from Claude.");
+  body.append(withheld);
+  return checkedLine(false, tokens.length
+    ? ["Failed the check after one retry. Named ", ...strongList(tokens), `, which ${isAre} not in your records.`]
+    : ["Failed the check after one retry."]);
+}
+
+function renderMethod(view) {
+  const explainedBy = document.getElementById("method-explained-by");
+  const heldTo = document.getElementById("method-held-to");
+  document.getElementById("method-held").hidden = view === null;
+  document.getElementById("method").hidden = false;
+  if (view === null) {
+    explainedBy.textContent = "Nobody. With no findings there was nothing to explain, so Claude was not asked.";
+    return;
+  }
+  explainedBy.replaceChildren(element("code", "", view.model), ", shown your records and the auditor’s findings and asked to write one plain explanation of each.");
+  const total = view.findings.length;
+  const passed = view.findings.filter((entry) => entry.explanation !== null).length;
+  const extra = view.extra_claims_removed;
+  heldTo.replaceChildren(
+    element("strong", "", `${passed} of ${total}`),
+    ` ${plural(total, "explanation", "explanations")} passed the claim check. Each one shown names a finding the audit made, quotes its record value exactly, and quotes no value that is not in your records.`,
+  );
+  // A clean first answer is shown as it came, so anything removed means the
+  // answer had already been sent back once.
+  if (passed < total || view.summary === null || extra > 0) {
+    heldTo.append(" Claude’s first answer failed the check, so it was sent back once with the problems listed, and whatever still failed was removed.");
+  }
+  if (extra > 0) {
+    heldTo.append(` ${extra} further ${plural(extra, "claim", "claims")} matched no finding on this page and ${plural(extra, "was", "were")} removed.`);
+  }
+}
+
+function setFindingsHeading(isExplained) {
+  document.getElementById("findings-title").textContent = isExplained ? "What each problem lets someone do" : "What the audit found";
+  document.getElementById("findings-note").textContent = isExplained
+    ? "The auditor decided what is wrong. Claude wrote the explanations, and each one was checked against your records before it reached this page."
+    : "Fixed rules from RFC 7208 (SPF) and RFC 7489 (DMARC), run as code. No language model decides what is wrong.";
+}
+
+function renderExplanation(view) {
+  renderSummary(view);
+  for (const entry of view.findings) {
+    const item = document.getElementById(`finding-${entry.number}`);
+    const body = item.querySelector(".finding-body");
+    body.querySelector(".rests-on")?.remove();
+    item.append(entry.explanation === null ? renderRemoved(entry, body) : renderExplained(entry, body));
+  }
+  setFindingsHeading(true);
+  renderMethod(view);
+}
+
+async function explainFindings(audited, number) {
+  explainController = new AbortController();
+  const signal = AbortSignal.any([explainController.signal, AbortSignal.timeout(EXPLAIN_TIMEOUT_MS)]);
+  const askAgain = () => explainFindings(audited, number);
+  showExplaining(audited);
+  let response;
+  let explained;
+  try {
+    response = await post("/api/explain", audited.domain, signal);
+    explained = response.ok ? await response.json() : null;
+  } catch (error) {
+    if (number !== checkNumber) return;
+    if (error.name === "TimeoutError") {
+      showExplainStopped("Claude took too long to explain the findings.", `No answer came within ${EXPLAIN_TIMEOUT_MS / 60000} minutes.`, "Ask Claude again", askAgain);
+    } else {
+      showExplainStopped("The page lost contact with esx before the explanations arrived.", "Check that esx serve is still running in your terminal, then ask again.", "Ask Claude again", askAgain);
+    }
+    return;
+  }
+  if (number !== checkNumber) return;
+  if (explained) {
+    if (matchesAudit(explained, audited)) renderExplanation(explained);
+    else showRecordsChanged(audited.domain);
+    return;
+  }
+  const error = await readError(response);
+  if (number !== checkNumber) return;
+  if (response.status === 429) {
+    showExplainStopped(
+      "Claude is already explaining another check.",
+      "esx writes one explanation at a time, which keeps the cost of the API bounded. Wait for the other check, in this tab or another, to finish, then ask again.",
+      "Ask Claude again",
+      askAgain,
+    );
+  } else if (response.status === 404 || response.status === 409) {
+    showRecordsChanged(audited.domain);
+  } else if (response.status === 502) {
+    showExplainStopped("The explanations could not be written.", asSentence(error), "Ask Claude again", askAgain);
+  } else {
+    showExplainStopped("esx failed while writing the explanations.", asSentence(error), "Ask Claude again", askAgain);
+  }
+}
+
+function renderAudit(view, number) {
   const findingsByNumber = new Map(view.findings.map((finding) => [finding.number, finding]));
   const now = new Date();
   const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -241,11 +468,19 @@ function renderAudit(view) {
   document.getElementById("finding-list").replaceChildren(...view.findings.map(renderFinding));
   linkFindings(document.getElementById("main"));
 
-  show("verdict", "records", ...(hasFindings ? ["findings"] : []));
+  setFindingsHeading(false);
+
+  show("verdict", "records", ...(hasFindings ? ["findings"] : ["method"]));
   // Reading layout restarts the animation for a second check of the same page.
   void slip.offsetWidth;
   slip.classList.add("is-drawing");
   title.focus();
+  if (hasFindings) {
+    explainFindings(view, number);
+  } else {
+    showExplainPart(null);
+    renderMethod(null);
+  }
 }
 
 function showStopped(titleNodes, reason, advice, canRetry) {
@@ -272,7 +507,18 @@ async function readError(response) {
   }
 }
 
+function post(path, domain, signal) {
+  return fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain }),
+    signal,
+  });
+}
+
 async function check(domain) {
+  const number = ++checkNumber;
+  explainController?.abort();
   showFieldError("");
   setBusy(true);
   document.getElementById("checking-domain").textContent = domain;
@@ -280,12 +526,7 @@ async function check(domain) {
   document.getElementById("checking-title").focus();
   let response;
   try {
-    response = await fetch("/api/audit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    response = await post("/api/audit", domain, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
   } catch {
     showStopped(
       [document.createTextNode("The page lost contact with esx.")],
@@ -300,7 +541,7 @@ async function check(domain) {
   if (response.ok) {
     const view = await response.json();
     input.value = view.domain;
-    renderAudit(view);
+    renderAudit(view, number);
     return;
   }
   const error = await readError(response);

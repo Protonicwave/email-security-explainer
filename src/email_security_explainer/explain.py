@@ -115,6 +115,9 @@ Generate = Callable[[str], Explanation]
 Raises ExplanationError when the model gives no explanation that fits the schema.
 """
 
+GeneratorFactory = Callable[[str, str], Generate]
+"""Builds a Generate from a model name and a system prompt."""
+
 
 class ExplanationError(Exception):
     """The model returned no explanation that fits the schema."""

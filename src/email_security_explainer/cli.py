@@ -7,7 +7,7 @@ import io
 import json
 import sys
 import textwrap
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +36,7 @@ from email_security_explainer.explain import (
     ExplainResult,
     ExplanationError,
     Generate,
+    GeneratorFactory,
     claude_generator,
     explain,
 )
@@ -50,9 +51,6 @@ DEFAULT_CASES_PATH = "cases/cases.json"
 DEFAULT_RESULTS_PATH = "eval-results.jsonl"
 DEFAULT_PORT = 8000
 MAX_PORT = 65535
-
-GeneratorFactory = Callable[[str, str], Generate]
-"""Builds a Generate from a model name and a system prompt."""
 
 
 def _claude_generator_for(model: str, system_prompt: str) -> Generate:
@@ -77,7 +75,7 @@ def main(
         elif args.command == "case":
             output = dump_case(fetch_records(parse_domain(args.domain), lookup))
         elif args.command == "serve":
-            serve(args.port, lookup)
+            serve(args.port, lookup, args.model, generator_for)
             return EXIT_OK
         else:
             output = _audit_or_explain(args, lookup, generator_for)
@@ -136,6 +134,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PORT,
         help=f"port on 127.0.0.1 to serve the page from (default: {DEFAULT_PORT})",
     )
+    _add_model_option(serve_command)
     return parser
 
 
