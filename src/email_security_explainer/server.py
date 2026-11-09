@@ -78,7 +78,14 @@ def make_server(
         page_files=page_files,
         explainer=_Explainer(model, generator_for, threading.Lock()),
     )
-    return ThreadingHTTPServer((HOST, port), handler)
+    return _LoopbackServer((HOST, port), handler)
+
+
+class _LoopbackServer(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second server bind a port that is already
+    # listening, so a taken port would go unreported. Elsewhere it only allows
+    # rebinding over connections a stopped server left in TIME_WAIT.
+    allow_reuse_address = sys.platform != "win32"
 
 
 def serve(

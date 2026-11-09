@@ -1,3 +1,4 @@
+import errno
 import http.client
 import json
 import threading
@@ -130,6 +131,11 @@ def test_serves_the_page_files(port: int, path: str, content_type: str, fragment
     assert headers["Content-Type"] == content_type
     assert "default-src 'self'" in headers["Content-Security-Policy"]
     assert fragment in body
+
+
+def test_refuses_a_port_another_server_is_listening_on(port: int, claude: FakeClaude) -> None:
+    with pytest.raises(OSError, check=lambda error: error.errno == errno.EADDRINUSE):
+        make_server(port, lookup, MODEL, claude.generator_for).server_close()
 
 
 def test_answers_404_for_an_unknown_path(port: int) -> None:
