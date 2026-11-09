@@ -49,8 +49,6 @@ _PAGE_FILES = {
 
 logger = logging.getLogger(__name__)
 
-PageFiles = dict[str, tuple[bytes, str]]
-
 
 @dataclass(frozen=True, slots=True)
 class _Explainer:
@@ -117,7 +115,7 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
         self,
         *args: Any,
         lookup: TxtLookup,
-        page_files: PageFiles,
+        page_files: dict[str, tuple[bytes, str]],
         explainer: _Explainer,
         **kwargs: Any,
     ) -> None:
@@ -127,7 +125,7 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:
-        if not self._is_from_this_page():
+        if self._refuse_foreign_request():
             return
         page_file = self._page_files.get(self.path)
         if page_file is None:
@@ -136,7 +134,7 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, *page_file)
 
     def do_POST(self) -> None:
-        if not self._is_from_this_page():
+        if self._refuse_foreign_request():
             return
         if self.path not in {"/api/audit", "/api/explain"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no API at {self.path}"})
@@ -212,9 +210,10 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_GATEWAY, {"error": str(err)})
         return None
 
-    def _is_from_this_page(self) -> bool:
-        """Refuse a request another site sent through the browser, including
-        one that reaches this port by rebinding its own name to 127.0.0.1."""
+    def _refuse_foreign_request(self) -> bool:
+        """Answer 403 and return True for a request another site sent through
+        the browser, including one that reaches this port by rebinding its own
+        name to 127.0.0.1."""
         address = self.server.server_address
         assert isinstance(address, tuple), address
         hosts = {f"{HOST}:{address[1]}", f"localhost:{address[1]}"}
@@ -222,9 +221,9 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
         if self.headers.get("Host") in hosts and (
             origin is None or origin in {f"http://{host}" for host in hosts}
         ):
-            return True
+            return False
         self._send_json(HTTPStatus.FORBIDDEN, {"error": "requests must come from the esx page"})
-        return False
+        return True
 
     def _read_domain(self) -> str | None:
         length_text = self.headers.get("Content-Length", "")
@@ -232,8 +231,6 @@ class _PageRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.LENGTH_REQUIRED, {"error": "expected a Content-Length"})
             return None
         if int(length_text) > MAX_BODY_BYTES:
-            # The body is never read, so the connection cannot be reused.
-            self.close_connection = True
             self._send_json(
                 HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
                 {"error": f"expected a body of at most {MAX_BODY_BYTES} bytes"},
