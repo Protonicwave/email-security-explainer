@@ -85,6 +85,26 @@ one case object in the corpus format, ready to add to `cases/cases.json`:
 uv run esx case example.com
 ```
 
+`esx serve` does what `esx explain` does in a web page at
+http://127.0.0.1:8000:
+
+```sh
+uv run esx serve
+uv run esx serve --port 8080 --model claude-opus-5-5
+```
+
+The page shows the verdict, the SPF and DMARC records with each finding marked
+on the token it rests on, and then Claude's checked explanation and fix for
+each finding. An explanation that fails the claim check after the repair round
+is shown as removed, with the values it named that the records lack. The audit
+needs no API key; the explanations need `ANTHROPIC_API_KEY`, and when the model
+or the API fails the page keeps the audit and gives the reason.
+
+The server listens on 127.0.0.1 only and refuses requests whose `Host` or
+`Origin` is not the page's own, so another website cannot use it. It writes one
+explanation at a time, which bounds what a double click or a second tab costs,
+and stops with Ctrl+C.
+
 ## Results
 
 One run of `esx eval --repeats 3` on 9 November 2026 with `claude-sonnet-5-5`
@@ -152,11 +172,12 @@ uv run mypy
 uv run vulture src --min-confidence 80
 ```
 
-The rule modules need full line and branch coverage:
+The rule modules, the claim check and the page's view of an audit need full
+line and branch coverage:
 
 ```sh
 uv run coverage run --branch --source=email_security_explainer -m pytest
-uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
+uv run coverage report --show-missing --fail-under=100 --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py,*/web.py"
 ```
 
 The claim check and the SPF and DMARC rules it trusts also have a mutation test
