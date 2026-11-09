@@ -1,4 +1,5 @@
-"""Command-line entry point: `esx audit`, `esx explain`, `esx eval` and `esx case`."""
+"""Command-line entry point: `esx audit`, `esx explain`, `esx eval`, `esx case` and
+`esx serve`."""
 
 import argparse
 import dataclasses
@@ -6,7 +7,7 @@ import io
 import json
 import sys
 import textwrap
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -35,10 +36,12 @@ from email_security_explainer.explain import (
     ExplainResult,
     ExplanationError,
     Generate,
+    GeneratorFactory,
     claude_generator,
     explain,
 )
 from email_security_explainer.findings import Finding
+from email_security_explainer.server import serve
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -46,9 +49,8 @@ TEXT_WIDTH_CHARACTERS = 80
 MAX_REPEATS = 10
 DEFAULT_CASES_PATH = "cases/cases.json"
 DEFAULT_RESULTS_PATH = "eval-results.jsonl"
-
-GeneratorFactory = Callable[[str, str], Generate]
-"""Builds a Generate from a model name and a system prompt."""
+DEFAULT_PORT = 8000
+MAX_PORT = 65535
 
 
 def _claude_generator_for(model: str, system_prompt: str) -> Generate:
@@ -72,6 +74,9 @@ def main(
             output = _evaluate(args, generator_for)
         elif args.command == "case":
             output = dump_case(fetch_records(parse_domain(args.domain), lookup))
+        elif args.command == "serve":
+            serve(args.port, lookup, args.model, generator_for, args.open_browser)
+            return EXIT_OK
         else:
             output = _audit_or_explain(args, lookup, generator_for)
     except (
@@ -120,6 +125,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "case", help="print a domain's records as a case for the evaluation corpus"
     )
     case_command.add_argument("domain", help="domain to capture, such as example.com")
+    serve_command = commands.add_parser(
+        "serve", help="check domains in a web page served to this machine only"
+    )
+    serve_command.add_argument(
+        "--port",
+        type=_port_number,
+        default=DEFAULT_PORT,
+        help=f"port on 127.0.0.1 to serve the page from (default: {DEFAULT_PORT})",
+    )
+    serve_command.add_argument(
+        "--open",
+        action="store_true",
+        dest="open_browser",
+        help="open the page in the default browser once the server is listening",
+    )
+    _add_model_option(serve_command)
     return parser
 
 
@@ -135,6 +156,12 @@ def _repeat_count(text: str) -> int:
         raise argparse.ArgumentTypeError(
             f"expected a whole number from 1 to {MAX_REPEATS}, got {text!r}"
         )
+    return int(text)
+
+
+def _port_number(text: str) -> int:
+    if not (text.isascii() and text.isdigit() and 1 <= int(text) <= MAX_PORT):
+        raise argparse.ArgumentTypeError(f"expected a port from 1 to {MAX_PORT}, got {text!r}")
     return int(text)
 
 

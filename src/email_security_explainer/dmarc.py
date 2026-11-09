@@ -28,12 +28,15 @@ class _Tag:
     text: str
 
 
+def select_records(dmarc_txt: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(record for record in dmarc_txt if _VERSION.match(record.lstrip()))
+
+
 def assess(dmarc_txt: tuple[str, ...]) -> DmarcAssessment:
-    records = [record for record in dmarc_txt if _VERSION.match(record.lstrip())]
-    match records:
-        case []:
+    match select_records(dmarc_txt):
+        case ():
             return DmarcAssessment([Finding(FindingCode.DMARC_MISSING)], is_enforcing=False)
-        case [record]:
+        case (record,):
             tags, invalid_segments = _parse_tags(record)
         case _:
             return DmarcAssessment([Finding(FindingCode.DMARC_MULTIPLE)], is_enforcing=False)

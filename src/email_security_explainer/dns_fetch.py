@@ -23,6 +23,10 @@ class DnsLookupError(Exception):
     """DNS gave no usable answer, so a record's absence cannot be concluded."""
 
 
+class DomainNotFoundError(DnsLookupError):
+    """The domain does not exist in DNS, so it publishes no records at all."""
+
+
 def lookup_txt(name: str) -> tuple[str, ...] | None:
     try:
         answer = dns.resolver.resolve(f"{name}.", "TXT", lifetime=REQUEST_TIMEOUT_SECONDS)
@@ -40,11 +44,12 @@ def lookup_txt(name: str) -> tuple[str, ...] | None:
 def fetch_records(domain: DomainName, lookup: TxtLookup = lookup_txt) -> DnsRecords:
     """Fetch the apex, DMARC and SPF include records for `domain`.
 
-    Raises DnsLookupError when the domain does not exist or DNS fails.
+    Raises DomainNotFoundError when the domain does not exist and
+    DnsLookupError when DNS fails.
     """
     apex_txt = lookup(domain)
     if apex_txt is None:
-        raise DnsLookupError(f"{domain} does not exist in DNS")
+        raise DomainNotFoundError(f"{domain} does not exist in DNS")
     dmarc_txt = lookup(f"_dmarc.{domain}") or ()
     spf_by_domain: dict[str, tuple[str, ...]] = {}
     for _ in range(MAX_FETCH_ROUNDS):

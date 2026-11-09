@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email security explainer</title>
+<meta name="description" content="Audit a domain's SPF and DMARC records, see each problem marked on the record itself, and read a checked explanation of each.">
+<meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16191f" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to results</a>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="wordmark" href="/">esx <span>Email security explainer</span></a>
+    <form class="check-form" id="check-form" novalidate>
+      <div class="field">
+        <label for="domain">Domain to check</label>
+        <input id="domain" name="domain" type="text" inputmode="url" autocomplete="url"
+               spellcheck="false" autocapitalize="off" placeholder="example.com"
+               aria-describedby="domain-error">
+        <p class="field-error" id="domain-error" role="alert" hidden></p>
+      </div>
+      <button class="button" type="submit" id="check-button">Check domain</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+  <section class="wrap verdict" id="intro" aria-labelledby="intro-title">
+    <h1 id="intro-title">Who can send email as your domain?</h1>
+    <p class="lede">Enter the domain you send email from. esx reads its SPF and DMARC records from public DNS, audits them against RFC 7208 and RFC 7489, and marks each problem on the record itself.</p>
+  </section>
+
+  <section class="wrap verdict" id="checking" hidden aria-labelledby="checking-title">
+    <h1 id="checking-title" tabindex="-1">Checking <span class="domain-name" id="checking-domain"></span><span class="then">Reading its records from public DNS.</span></h1>
+  </section>
+
+  <section class="wrap verdict stopped" id="stopped" hidden aria-labelledby="stopped-title">
+    <h1 id="stopped-title" tabindex="-1"></h1>
+    <p id="stopped-reason"></p>
+    <p id="stopped-advice"></p>
+    <button class="button quiet" type="button" id="retry">Check domain again</button>
+  </section>
+
+  <section class="wrap verdict" id="verdict" hidden aria-labelledby="verdict-title">
+    <p class="fetched" id="fetched"></p>
+    <h1 id="verdict-title" tabindex="-1"></h1>
+    <div class="verdict-foot">
+      <div aria-live="polite">
+        <ol class="steps" id="steps" aria-label="Progress" hidden></ol>
+        <p class="summary" id="summary" hidden></p>
+        <div class="explain-stopped" id="explain-stopped" hidden>
+          <p class="explain-stopped-title" id="explain-stopped-title"></p>
+          <p id="explain-stopped-reason"></p>
+          <p>The audit stands either way: it comes from fixed rules, not from Claude.</p>
+          <button class="button quiet" type="button" id="explain-retry"></button>
+        </div>
+      </div>
+      <dl class="tally" id="tally" aria-label="Findings by severity"></dl>
+    </div>
+  </section>
+
+  <section class="wrap section" id="records" hidden aria-labelledby="records-title">
+    <div class="section-head">
+      <h2 id="records-title"></h2>
+      <p class="section-note" id="records-note">Each mark sits on the exact part of the record a finding rests on. Select one to read it.</p>
+    </div>
+    <div class="slip" id="slip"></div>
+  </section>
+
+  <section class="wrap section" id="findings" hidden aria-labelledby="findings-title">
+    <div class="section-head">
+      <h2 id="findings-title"></h2>
+      <p class="section-note" id="findings-note"></p>
+    </div>
+    <ol class="findings" id="finding-list"></ol>
+  </section>
+
+  <section class="wrap section" id="method" hidden aria-labelledby="method-title">
+    <div class="section-head">
+      <h2 id="method-title">How this was checked</h2>
+    </div>
+    <dl class="method">
+      <div>
+        <dt>Found by</dt>
+        <dd>The auditor: fixed rules from <strong>RFC 7208</strong> (SPF) and <strong>RFC 7489</strong> (DMARC), run as code. No language model decides what is wrong.</dd>
+      </div>
+      <div>
+        <dt>Explained by</dt>
+        <dd id="method-explained-by"></dd>
+      </div>
+      <div id="method-held">
+        <dt>Held to</dt>
+        <dd class="scoreline" id="method-held-to"></dd>
+      </div>
+      <div>
+        <dt>Not checked</dt>
+        <dd>DKIM, MTA-STS, BIMI, the SPF limit on lookups that return nothing, and the DMARC fallback for subdomains without their own record.</dd>
+      </div>
+    </dl>
+  </section>
+
+</main>
+
+<footer class="wrap footer">
+  <p>Records are read from public DNS when you press Check domain, and nothing is stored. DKIM is not checked: finding a DKIM key needs a selector name that DNS does not reveal.</p>
+</footer>
+</body>
+</html>

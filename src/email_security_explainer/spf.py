@@ -223,16 +223,23 @@ def walk_lookups(
     return LookupWalk(lookup_count, frozenset(unresolved), tuple(dict.fromkeys(unusable)))
 
 
-def lookup_targets(txt_records: tuple[str, ...]) -> list[str]:
-    """The include and redirect targets the SPF record among `txt_records`
-    sends a lookup to, or none when there is not exactly one valid record."""
+def followed_terms(txt_records: tuple[str, ...]) -> list[Term]:
+    """The include and redirect terms of the SPF record among `txt_records`
+    whose target a lookup reaches, or none when there is not exactly one
+    valid record."""
     record = _single_valid_record(txt_records)
     if record is None:
         return []
-    targets = (
-        _followable_target(term) for term in record.terms if _causes_lookup(term, record.has_all)
-    )
-    return [target for target in targets if target is not None]
+    return [
+        term
+        for term in record.terms
+        if _causes_lookup(term, record.has_all) and _followable_target(term) is not None
+    ]
+
+
+def lookup_targets(txt_records: tuple[str, ...]) -> list[str]:
+    """The targets of `followed_terms(txt_records)`, normalised."""
+    return [normalise_target(term.value) for term in followed_terms(txt_records)]
 
 
 def _single_valid_record(txt_records: tuple[str, ...]) -> ParsedRecord | None:

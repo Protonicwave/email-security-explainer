@@ -1,7 +1,7 @@
 import io
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import anthropic
@@ -19,6 +19,7 @@ from email_security_explainer.explain import (
     SYSTEM_PROMPT,
     ExplanationError,
     Generate,
+    GeneratorFactory,
 )
 from email_security_explainer.findings import FindingCode
 from email_security_explainer.schema import Claim, Explanation
@@ -463,3 +464,89 @@ def test_errors_the_console_code_page_cannot_hold_are_written_as_utf8(
 
     sys.stderr.flush()
     assert "例" in buffer.getvalue().decode("utf-8")
+
+
+ServeCall = tuple[int, Callable[[str], tuple[str, ...] | None], str, GeneratorFactory, bool]
+
+
+def fake_serve(monkeypatch: pytest.MonkeyPatch, error: OSError | None = None) -> list[ServeCall]:
+    calls: list[ServeCall] = []
+
+    def serve(
+        port: int,
+        lookup: Callable[[str], tuple[str, ...] | None],
+        model: str,
+        generator_for: GeneratorFactory,
+        open_browser: bool,
+    ) -> None:
+        calls.append((port, lookup, model, generator_for, open_browser))
+        if error is not None:
+            raise error
+
+    monkeypatch.setattr("email_security_explainer.cli.serve", serve)
+    return calls
+
+
+def test_serve_passes_the_port_and_dns_lookup_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = fake_serve(monkeypatch)
+
+    def lookup(name: str) -> tuple[str, ...] | None:
+        return ()
+
+    assert main(["serve", "--port", "8123"], lookup) == EXIT_OK
+    assert [(port, given) for port, given, _model, _factory, _open in calls] == [(8123, lookup)]
+
+
+def test_serve_passes_the_model_and_generator_factory_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = fake_serve(monkeypatch)
+
+    def generator_for(model: str, system_prompt: str) -> Generate:
+        raise AssertionError("serve builds generators only when a page asks")
+
+    assert main(["serve", "--model", "claude-other"], generator_for=generator_for) == EXIT_OK
+    assert [(model, factory) for _port, _lookup, model, factory, _open in calls] == [
+        ("claude-other", generator_for)
+    ]
+
+
+def test_serve_defaults_to_port_8000_and_the_default_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = fake_serve(monkeypatch)
+    assert main(["serve"]) == EXIT_OK
+    assert [(port, model) for port, _lookup, model, _factory, _open in calls] == [
+        (8000, DEFAULT_MODEL)
+    ]
+
+
+@pytest.mark.parametrize(("argv", "opens_browser"), [([], False), (["--open"], True)])
+def test_serve_opens_the_browser_only_when_asked(
+    argv: list[str], opens_browser: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = fake_serve(monkeypatch)
+    assert main(["serve", *argv]) == EXIT_OK
+    assert [call[-1] for call in calls] == [opens_browser]
+
+
+# The last is 80 in full-width digits, which int() would accept.
+@pytest.mark.parametrize(
+    "port", ["0", "65536", "http", "\N{FULLWIDTH DIGIT EIGHT}\N{FULLWIDTH DIGIT ZERO}"]
+)
+def test_serve_rejects_a_port_out_of_range(
+    port: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = fake_serve(monkeypatch)
+    with pytest.raises(SystemExit):
+        main(["serve", "--port", port])
+    assert calls == []
+    assert "expected a port from 1 to 65535" in capsys.readouterr().err
+
+
+def test_serve_reports_a_port_already_in_use(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_serve(monkeypatch, OSError("address already in use"))
+    assert main(["serve"]) == EXIT_FAILURE
+    assert capsys.readouterr().err == "esx: address already in use\n"

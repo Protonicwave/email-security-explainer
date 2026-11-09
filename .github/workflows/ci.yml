@@ -23,7 +23,7 @@ jobs:
       - run: uv run coverage run --branch --source=email_security_explainer -m pytest
       - run: >-
           uv run coverage report --show-missing --fail-under=100
-          --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py"
+          --include="*/spf.py,*/dmarc.py,*/audit.py,*/findings.py,*/domain.py,*/claims.py,*/web.py"
 
   mutation:
     runs-on: ubuntu-latest
